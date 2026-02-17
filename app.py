@@ -72,38 +72,42 @@ elif persona=="Warehouse Arun":
 elif persona=="Supplier ABC Foods":
     st.sidebar.info("Concern: Sudden urgent purchase orders")
 
+    
+    conn = get_conn()
+    cur = conn.cursor()
 
-        
-
-    conn=get_conn()
-    cur=conn.cursor()
-
+    # stop if already filled
     if cur.execute("SELECT COUNT(*) FROM orders").fetchone()[0] > 0:
         return
-    items=["Milk","Bread","Eggs","Juice","Rice","Sugar","Biscuits","Oil"]
-    cats=["Dairy","Bakery","Dairy","Beverage","Grocery","Grocery","Snacks","Grocery"]
-    customers=["Retailer A","Hotel B","Online C","Supermarket D"]
-    cities=["Chennai","Madurai","Coimbatore","Salem"]
-    warehouses=["Chennai Hub","Madurai Hub","Coimbatore Hub"]
-    suppliers_list=["ABC Foods","Fresh Farms","Dairy Best"]
+
+    items = ["Milk","Bread","Eggs","Juice","Rice","Sugar","Biscuits","Oil"]
+    cats = ["Dairy","Bakery","Dairy","Beverage","Grocery","Grocery","Snacks","Grocery"]
+    customers = ["Retailer A","Hotel B","Online C","Supermarket D"]
+    cities = ["Chennai","Madurai","Coimbatore","Salem"]
+    warehouses = ["Chennai Hub","Madurai Hub","Coimbatore Hub"]
+    suppliers_list = ["ABC Foods","Fresh Farms","Dairy Best"]
 
     # ---- ORDERS ----
     for i in range(120):
-        idx=np.random.randint(0,len(items))
+        idx = np.random.randint(0,len(items))
         cur.execute("INSERT INTO orders VALUES (?,?,?,?,?,?,?,?,?,?)",
         (f"O{i}","2025-01-"+str(np.random.randint(1,28)),
          np.random.choice(customers),
          np.random.choice(cities),
-         "Retail",items[idx],cats[idx],
+         "Retail",
+         items[idx],
+         cats[idx],
          np.random.randint(20,150),
-         np.random.randint(20,120),"Normal"))
+         np.random.randint(20,120),
+         "Normal"))
 
     # ---- INVENTORY ----
     for w in warehouses:
         for i,item in enumerate(items):
             cur.execute("INSERT INTO inventory VALUES (?,?,?,?,?,?,?,?,?)",
             (item,w,cats[i],np.random.choice(suppliers_list),
-             np.random.randint(200,600),np.random.randint(50,200),
+             np.random.randint(200,600),
+             np.random.randint(50,200),
              150,150,np.random.randint(10,40)))
 
     # ---- SUPPLIERS ----
