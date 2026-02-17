@@ -56,7 +56,8 @@ USER_WHATSAPP="whatsapp:+91XXXXXXXXXX"
 
 def send_alert(msg):
     try:
-        Client(TWILIO_SID,TWILIO_TOKEN).messages.create(body=msg,from_=TWILIO_WHATSAPP,to=USER_WHATSAPP)
+        Client(TWILIO_SID,TWILIO_TOKEN).messages.create(
+            body=msg,from_=TWILIO_WHATSAPP,to=USER_WHATSAPP)
     except: pass
 
 # ================= LOGIN =================
@@ -70,7 +71,8 @@ def login():
             st.session_state.logged=True
             st.session_state.role=res[0]
             st.rerun()
-        else: st.error("Invalid login")
+        else:
+            st.error("Invalid login")
 
 if "logged" not in st.session_state: st.session_state.logged=False
 if not st.session_state.logged:
@@ -78,7 +80,7 @@ if not st.session_state.logged:
 
 role=st.session_state.role
 
-# ================= HELPERS =================
+# ================= DATA HELPERS =================
 def get_table(name): return pd.read_sql(f"SELECT * FROM {name}",conn)
 
 def forecast_demand(df):
@@ -99,20 +101,31 @@ def inventory_sim(inv,fc):
 def capacity_util(cap,fc): return round((sum(fc.values())/cap.max_units.sum())*100,2)
 
 def supplier_risk(df):
-    return pd.DataFrame([[r.item,"HIGH" if random.random()>0.7 else "MEDIUM" if random.random()>0.4 else "LOW"]
-        for _,r in df.iterrows()],columns=["Item","Risk"])
+    risks=[]
+    for _,r in df.iterrows():
+        p=random.random()
+        if p>0.7: risk="HIGH"
+        elif p>0.4: risk="MEDIUM"
+        else: risk="LOW"
+        risks.append([r.item,risk])
+    return pd.DataFrame(risks,columns=["Item","Risk"])
 
 def actions(inv,risks):
     acts=[]
     for _,r in inv.iterrows():
-        if r.EndStock<0: msg=f"🚨 STOCKOUT {r.Item}"; acts.append(msg); send_alert(msg)
-        elif r.EndStock<r.Safety: acts.append(f"⚠️ Reorder {r.Item}")
-        elif r.EndStock>r.Safety*3: acts.append(f"📉 Overstock {r.Item}")
+        if r.EndStock<0:
+            msg=f"🚨 STOCKOUT {r.Item}"
+            acts.append(msg); send_alert(msg)
+        elif r.EndStock<r.Safety:
+            acts.append(f"⚠️ Reorder {r.Item}")
+        elif r.EndStock>r.Safety*3:
+            acts.append(f"📉 Overstock {r.Item}")
     for _,r in risks.iterrows():
-        if r.Risk=="HIGH": acts.append(f"⛔ Supplier risk {r.Item}")
+        if r.Risk=="HIGH":
+            acts.append(f"⛔ Supplier risk {r.Item}")
     return acts
 
-# ================= MENU BY ROLE =================
+# ================= ROLE MENU =================
 if role=="Admin":
     menu=st.sidebar.selectbox("Menu",["Dashboard","Forecast","Simulator","Supplier Risk","Data Entry"])
 elif role=="Planner":
@@ -159,11 +172,18 @@ elif menu=="Simulator":
         fc={k:v*(1+spike/100) for k,v in fc.items()}
         st.dataframe(inventory_sim(inventory,fc))
 
-# ================= SUPPLIER RISK =================
+# ================= SUPPLIER RISK (FIXED) =================
 elif menu=="Supplier Risk":
+    st.subheader("🚚 Supplier Risk Monitor")
     risks=supplier_risk(suppliers)
-    for _,r in risks.iterrows():
-        st.error(r.Item) if r.Risk=="HIGH" else st.warning(r.Item) if r.Risk=="MEDIUM" else st.success(r.Item)
+
+    for _, r in risks.iterrows():
+        if r["Risk"]=="HIGH":
+            st.error(f"High supplier delay risk → {r['Item']}")
+        elif r["Risk"]=="MEDIUM":
+            st.warning(f"Medium supplier delay risk → {r['Item']}")
+        else:
+            st.success(f"Low supplier delay risk → {r['Item']}")
 
 # ================= DATA ENTRY (UPLOAD + MANUAL) =================
 elif menu=="Data Entry":
@@ -184,18 +204,22 @@ elif menu=="Data Entry":
 
     with manual_tab:
         tab1,tab2,tab3,tab4=st.tabs(["Orders","Inventory","Suppliers","Capacity"])
+
         with tab1:
             d=st.date_input("Date");item=st.text_input("Item");qty=st.number_input("Qty",0)
             if st.button("Add Order"):
                 c.execute("INSERT INTO orders VALUES (?,?,?)",(d,item,qty));safe_commit();st.success("Added")
+
         with tab2:
             item=st.text_input("Item ");on=st.number_input("On hand");wip=st.number_input("WIP");ss=st.number_input("Safety")
             if st.button("Add Inventory"):
                 c.execute("INSERT INTO inventory VALUES (?,?,?,?)",(item,on,wip,ss));safe_commit();st.success("Added")
+
         with tab3:
             item=st.text_input("Supplier Item");lead=st.number_input("Lead");moq=st.number_input("MOQ")
             if st.button("Add Supplier"):
                 c.execute("INSERT INTO suppliers VALUES (?,?,?)",(item,lead,moq));safe_commit();st.success("Added")
+
         with tab4:
             d=st.date_input("Capacity Date");cap=st.number_input("Max Units")
             if st.button("Add Capacity"):
