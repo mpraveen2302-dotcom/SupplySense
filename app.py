@@ -1,6 +1,6 @@
 # ==========================================================
-# SUPPLYSENSE — FINAL TANCAM PRODUCTION VERSION
-# Fully defensive • Upload CSV/XLSX • Manual entry • AI
+# SUPPLYSENSE – FINAL TANCAM BUILD
+# Real-time Supply–Demand Balancing for MSMEs
 # ==========================================================
 
 import streamlit as st
@@ -8,17 +8,19 @@ import pandas as pd
 import numpy as np
 import sqlite3
 import plotly.express as px
-from openai import OpenAI
+
+# ---------- OPTIONAL AI ----------
+AI_AVAILABLE = True
+try:
+    from openai import OpenAI
+    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+except:
+    AI_AVAILABLE = False
 
 st.set_page_config(layout="wide")
 
 # ==========================================================
-# OPENAI (AI ASSISTANT)
-# ==========================================================
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-
-# ==========================================================
-# DATABASE CONNECTION (STREAMLIT SAFE)
+# DATABASE
 # ==========================================================
 @st.cache_resource
 def get_conn():
@@ -29,11 +31,8 @@ def run_query(q,p=()):
     cur=conn.cursor()
     cur.execute(q,p)
     conn.commit()
-    return cur
 
-# ==========================================================
-# CREATE TABLES (ENTERPRISE MODEL)
-# ==========================================================
+# ---------- TABLES ----------
 run_query("""CREATE TABLE IF NOT EXISTS orders(
 order_id TEXT,date TEXT,customer TEXT,city TEXT,channel TEXT,
 item TEXT,category TEXT,qty INT,unit_price FLOAT,priority TEXT)""")
@@ -46,163 +45,153 @@ run_query("""CREATE TABLE IF NOT EXISTS suppliers(
 supplier TEXT,item TEXT,country TEXT,lead_time INT,
 moq INT,reliability FLOAT,cost_per_unit FLOAT)""")
 
-run_query("""CREATE TABLE IF NOT EXISTS capacity(
-date TEXT,plant TEXT,shift_hours INT,max_units INT,utilization FLOAT)""")
+# ==========================================================
+# LOAD + NORMALIZE DATA (NEVER CRASH)
+# ==========================================================
+def get_table(name):
+    try: return pd.read_sql(f"SELECT * FROM {name}",get_conn())
+    except: return pd.DataFrame()
 
-# ==========================================================
-# NORMALIZATION (PREVENT ALL KEYERRORS)
-# ==========================================================
 def normalize(df, defaults):
     if df is None or len(df)==0:
         return pd.DataFrame(defaults,index=[0]).drop(index=0)
-    for col,val in defaults.items():
-        if col not in df.columns:
-            df[col]=val
+    for c,v in defaults.items():
+        if c not in df.columns: df[c]=v
     return df
-
-def get_table(name):
-    try:
-        return pd.read_sql(f"SELECT * FROM {name}",get_conn())
-    except:
-        return pd.DataFrame()
 
 orders = normalize(get_table("orders"),
 {"order_id":"ORD001","date":"2025-01-01","customer":"Retailer",
- "city":"Chennai","channel":"Retail","item":"Sample",
- "category":"General","qty":0,"unit_price":100,"priority":"Normal"})
+ "city":"Chennai","channel":"Retail","item":"Milk",
+ "category":"Dairy","qty":0,"unit_price":40,"priority":"Normal"})
 
 inventory = normalize(get_table("inventory"),
-{"item":"Sample","warehouse":"Main","category":"General",
- "supplier":"Default","on_hand":0,"wip":0,"safety":50,
- "reorder_point":50,"unit_cost":50})
+{"item":"Milk","warehouse":"Main","category":"Dairy",
+ "supplier":"ABC Foods","on_hand":100,"wip":50,"safety":80,
+ "reorder_point":80,"unit_cost":25})
 
 suppliers = normalize(get_table("suppliers"),
-{"supplier":"Default","item":"Sample","country":"India",
- "lead_time":7,"moq":100,"reliability":0.9,"cost_per_unit":50})
-
-capacity = normalize(get_table("capacity"),
-{"date":"2025-01-01","plant":"Plant1","shift_hours":8,
- "max_units":1000,"utilization":75})
+{"supplier":"ABC Foods","item":"Milk","country":"India",
+ "lead_time":5,"moq":100,"reliability":0.9,"cost_per_unit":25})
 
 # ==========================================================
-# KPI ENGINE
+# REAL-TIME SUPPLY DEMAND BALANCING ENGINE
 # ==========================================================
-def calc_kpis():
-    try:
-        revenue=(orders["qty"]*orders["unit_price"]).sum()
-        inv_value=(inventory["on_hand"]*inventory["unit_cost"]).sum()
-        service=round(100-np.random.randint(2,8),2)
-        util=round(capacity["utilization"].mean(),2)
-        return revenue,inv_value,service,util
-    except:
-        return 0,0,0,75
+def balancing_engine():
+    df = inventory.copy()
+    demand = orders.groupby("item")["qty"].sum().reset_index()
+    df = df.merge(demand, on="item", how="left").fillna(0)
+
+    df["available_stock"] = df["on_hand"] + df["wip"]
+    df["projected_stock"] = df["available_stock"] - df["qty"]
+
+    actions=[]
+    for _,r in df.iterrows():
+        if r["projected_stock"] < 0:
+            actions.append(f"🚨 STOCKOUT risk for {r['item']} → Expedite supplier order")
+        elif r["projected_stock"] < r["safety"]:
+            actions.append(f"⚠️ Low stock {r['item']} → Increase production batch")
+        elif r["projected_stock"] > r["safety"]*3:
+            actions.append(f"📦 Overstock {r['item']} → Run discount promotion")
+
+    return df, actions
+
+balanced, actions = balancing_engine()
 
 # ==========================================================
-# SAFE PLOT FUNCTION (NEVER CRASH)
+# PERSONAS (PROBLEM STATEMENT CHARACTERS)
 # ==========================================================
-def safe_plot(fig_func):
-    try:
-        fig=fig_func()
-        st.plotly_chart(fig,use_container_width=True)
-    except:
-        st.warning("Chart unavailable for current dataset.")
+st.sidebar.title("👥 MSME Personas")
+
+persona = st.sidebar.selectbox("Choose Persona",
+["Owner – Rajesh","Planner – Kavitha","Warehouse – Arun","Supplier – ABC Foods"])
+
+if persona=="Owner – Rajesh":
+    st.sidebar.info("Concern: Cash tied in stock & missed deliveries")
+
+if persona=="Planner – Kavitha":
+    st.sidebar.info("Concern: Constant rescheduling & firefighting")
+
+if persona=="Warehouse – Arun":
+    st.sidebar.info("Concern: Overstock & storage space")
+
+if persona=="Supplier – ABC Foods":
+    st.sidebar.info("Concern: Sudden urgent purchase orders")
 
 # ==========================================================
-# SIDEBAR MENU
+# MENU
 # ==========================================================
-menu=st.sidebar.selectbox("Navigation",
-["Dashboard","Demand Analytics","Customer Analytics",
- "Supplier Analytics","AI Assistant","Upload Data","Manual Entry"])
+menu = st.sidebar.selectbox("Navigation",
+["Control Tower","Analytics","AI Assistant","Upload Data","Manual Entry"])
 
 # ==========================================================
-# DASHBOARD
+# CONTROL TOWER DASHBOARD
 # ==========================================================
-if menu=="Dashboard":
+if menu=="Control Tower":
     st.title("🏭 SupplySense Control Tower")
 
-    revenue,inv_value,service,util=calc_kpis()
-    c1,c2,c3,c4=st.columns(4)
-    c1.metric("Revenue ₹",int(revenue))
-    c2.metric("Inventory Value ₹",int(inv_value))
-    c3.metric("Service Level %",service)
-    c4.metric("Capacity Util %",util)
+    col1,col2,col3 = st.columns(3)
+    col1.metric("Items at Risk", len(actions))
+    col2.metric("Orders", len(orders))
+    col3.metric("Inventory Items", len(inventory))
 
-    st.subheader("Inventory by Warehouse")
-    safe_plot(lambda: px.bar(inventory,x="warehouse",y="on_hand",color="category"))
+    st.subheader("⚠️ Recommended Actions")
+    for a in actions: st.warning(a)
 
-# ==========================================================
-# DEMAND ANALYTICS
-# ==========================================================
-elif menu=="Demand Analytics":
-    st.title("Demand Analytics")
-    orders["date"]=pd.to_datetime(orders["date"],errors="coerce")
-    daily=orders.groupby("date")["qty"].sum().reset_index()
-    safe_plot(lambda: px.line(daily,x="date",y="qty",title="Demand Trend"))
-    safe_plot(lambda: px.pie(orders,names="category",values="qty",title="Demand by Category"))
+    st.subheader("Projected Stock Levels")
+    st.dataframe(balanced)
 
 # ==========================================================
-# CUSTOMER ANALYTICS
+# ANALYTICS
 # ==========================================================
-elif menu=="Customer Analytics":
-    st.title("Customer Analytics")
-    orders["revenue"]=orders["qty"]*orders["unit_price"]
-    top=orders.groupby("customer")["revenue"].sum().sort_values(ascending=False).head(10)
-    safe_plot(lambda: px.bar(top,title="Top Customers"))
+elif menu=="Analytics":
+    st.title("📊 Demand & Inventory Insights")
+
+    try:
+        st.plotly_chart(px.bar(inventory,x="warehouse",y="on_hand",color="category"))
+        st.plotly_chart(px.pie(orders,names="category",values="qty"))
+    except:
+        st.warning("Upload more diverse data to unlock full analytics")
 
 # ==========================================================
-# SUPPLIER ANALYTICS
-# ==========================================================
-elif menu=="Supplier Analytics":
-    st.title("Supplier Risk")
-    suppliers["risk"]=suppliers["lead_time"]*(1-suppliers["reliability"])
-    safe_plot(lambda: px.bar(suppliers,x="supplier",y="risk"))
-
-# ==========================================================
-# AI ASSISTANT
+# AI ASSISTANT (SAFE FALLBACK)
 # ==========================================================
 elif menu=="AI Assistant":
-    st.title("🤖 Ask SupplySense AI")
-    q=st.text_input("Ask any supply chain question")
+    st.title("🤖 Ask SupplySense")
+
+    q = st.text_input("Ask a planning question")
+
     if q:
-        context=f"""
-        Orders:
-        {orders.head().to_string()}
-        Inventory:
-        {inventory.head().to_string()}
-        Suppliers:
-        {suppliers.head().to_string()}
-        """
-        res=client.chat.completions.create(
-            model="gpt-4.1-mini",
-            messages=[
-                {"role":"system","content":"You are a supply chain AI expert."},
-                {"role":"user","content":context+"\nQuestion:"+q}
-            ])
-        st.success(res.choices[0].message.content)
+        if AI_AVAILABLE:
+            context=f"Inventory:\n{inventory.head()}\nOrders:\n{orders.head()}"
+            res=client.chat.completions.create(
+                model="gpt-4.1-mini",
+                messages=[{"role":"user","content":context+"\n"+q}]
+            )
+            st.success(res.choices[0].message.content)
+        else:
+            st.info("AI offline → Showing rule-based insight")
+            st.write("Based on current data, review low stock & supplier lead times.")
 
 # ==========================================================
-# FILE UPLOAD (CSV / EXCEL)
+# UPLOAD CSV / EXCEL
 # ==========================================================
 elif menu=="Upload Data":
-    st.title("Upload Excel / CSV")
-    table=st.selectbox("Select Table",
-    ["orders","inventory","suppliers","capacity"])
-    file=st.file_uploader("Upload file",type=["csv","xlsx"])
+    table=st.selectbox("Table",["orders","inventory","suppliers"])
+    file=st.file_uploader("Upload CSV/Excel",type=["csv","xlsx"])
     if file:
         df=pd.read_excel(file) if file.name.endswith(".xlsx") else pd.read_csv(file)
         df.to_sql(table,get_conn(),if_exists="replace",index=False)
-        st.success("Upload successful!")
+        st.success("Uploaded!")
 
 # ==========================================================
 # MANUAL ENTRY
 # ==========================================================
 elif menu=="Manual Entry":
-    st.title("Manual Order Entry")
+    st.title("➕ Add New Order")
     item=st.text_input("Item")
     qty=st.number_input("Quantity")
-    price=st.number_input("Unit Price")
     if st.button("Add Order"):
         run_query("INSERT INTO orders VALUES (?,?,?,?,?,?,?,?,?,?)",
-                  ("ORDNEW","2025-01-01","Retailer","Chennai",
-                   "Retail",item,"General",qty,price,"Normal"))
-        st.success("Order added!")
+        ("ORDNEW","2025-01-01","Retailer","Chennai","Retail",
+         item,"General",qty,40,"Normal"))
+        st.success("Order Added!")
