@@ -101,6 +101,9 @@ def get_table(name):
     except:
         return pd.DataFrame()
 
+# ==========================================================
+# LOAD DATA FOR SELECTED PERSONA
+# ==========================================================
 orders = get_table(f"orders_{persona_key}")
 inventory = get_table(f"inventory_{persona_key}")
 suppliers = get_table(f"suppliers_{persona_key}")
@@ -186,7 +189,9 @@ st.sidebar.title("👥 MSME Personas")
 
 persona=st.sidebar.selectbox("Choose Persona",
 ["Owner Rajesh","Planner Kavitha","Warehouse Arun","Supplier ABC Foods"])
-# persona database key
+# ==========================================================
+# PERSONA DATABASE KEY (MULTI-TENANT FIX)
+# ==========================================================
 persona_key = {
     "Owner Rajesh":"rajesh",
     "Planner Kavitha":"kavitha",
