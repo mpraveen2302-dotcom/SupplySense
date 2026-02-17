@@ -101,9 +101,10 @@ def get_table(name):
     except:
         return pd.DataFrame()
 
-orders=get_table("orders")
-inventory=get_table("inventory")
-suppliers=get_table("suppliers")
+orders = get_table(f"orders_{persona_key}")
+inventory = get_table(f"inventory_{persona_key}")
+suppliers = get_table(f"suppliers_{persona_key}")
+
 
 # ==========================================================
 # REAL-TIME SUPPLY DEMAND BALANCING ENGINE
@@ -114,6 +115,8 @@ suppliers=get_table("suppliers")
 def balancing_engine():
 
     # copy tables safely
+    inventory = get_table(f"inventory_{persona_key}")
+    orders = get_table(f"orders_{persona_key}")
     df = inventory.copy()
     ord_df = orders.copy()
 
@@ -183,6 +186,14 @@ st.sidebar.title("👥 MSME Personas")
 
 persona=st.sidebar.selectbox("Choose Persona",
 ["Owner Rajesh","Planner Kavitha","Warehouse Arun","Supplier ABC Foods"])
+# persona database key
+persona_key = {
+    "Owner Rajesh":"rajesh",
+    "Planner Kavitha":"kavitha",
+    "Warehouse Arun":"arun",
+    "Supplier ABC Foods":"supplier"
+}[persona]
+
 
 if persona=="Owner Rajesh":
     st.sidebar.info("Concern: Cash flow & missed deliveries")
@@ -319,7 +330,9 @@ elif menu=="Upload Data":
         st.write("Detected columns:", df.columns.tolist())
 
         conn = get_conn()
-        df.to_sql(table, conn, if_exists="replace", index=False)
+        table_name = f"{table}_{persona_key}"
+        df.to_sql(table_name, conn, if_exists="replace", index=False)
+        st.success(f"Dataset uploaded for {persona}")
 
         st.success("File uploaded and standardized successfully!")
 
