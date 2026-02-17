@@ -3,4 +3,7 @@ pandas
 numpy
 plotly
 twilio
+reportlab
+SpeechRecognition
+pyaudio
 openpyxl
