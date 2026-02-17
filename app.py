@@ -108,27 +108,74 @@ suppliers=get_table("suppliers")
 # ==========================================================
 # REAL-TIME SUPPLY DEMAND BALANCING ENGINE
 # ==========================================================
+# ==========================================================
+# 🧠 SAFE SUPPLY–DEMAND BALANCING ENGINE
+# ==========================================================
 def balancing_engine():
 
-    df=inventory.copy()
-    demand=orders.groupby("item")["qty"].sum().reset_index()
-    df=df.merge(demand,on="item",how="left").fillna(0)
+    # copy tables safely
+    df = inventory.copy()
+    ord_df = orders.copy()
 
-    df["available_stock"]=df["on_hand"]+df["wip"]
-    df["projected_stock"]=df["available_stock"]-df["qty"]
+    # ------------------------------------------------------
+    # 🔥 AUTO CREATE MISSING COLUMNS (PREVENTS ALL KeyErrors)
+    # ------------------------------------------------------
+    inv_required = {
+        "item": "",
+        "on_hand": 0,
+        "wip": 0,
+        "safety": 100
+    }
 
-    actions=[]
-    for _,r in df.iterrows():
-        if r["projected_stock"]<0:
+    for col, default in inv_required.items():
+        if col not in df.columns:
+            df[col] = default
+
+    if "item" not in ord_df.columns:
+        ord_df["item"] = ""
+
+    if "qty" not in ord_df.columns:
+        ord_df["qty"] = 0
+
+    # ------------------------------------------------------
+    # DEMAND CALCULATION
+    # ------------------------------------------------------
+    demand = ord_df.groupby("item")["qty"].sum().reset_index()
+    demand.rename(columns={"qty":"forecast_demand"}, inplace=True)
+
+    df = df.merge(demand, on="item", how="left")
+    df["forecast_demand"] = df["forecast_demand"].fillna(0)
+
+    # ------------------------------------------------------
+    # STOCK PROJECTION
+    # ------------------------------------------------------
+    df["available_stock"] = df["on_hand"] + df["wip"]
+    df["projected_stock"] = df["available_stock"] - df["forecast_demand"]
+
+    # ------------------------------------------------------
+    # ACTION RECOMMENDATION ENGINE
+    # ------------------------------------------------------
+    actions = []
+
+    for _, r in df.iterrows():
+
+        if r["projected_stock"] < 0:
             actions.append(f"🚨 STOCKOUT risk for {r['item']} → Expedite supplier")
-        elif r["projected_stock"]<r["safety"]:
+
+        elif r["projected_stock"] < r["safety"]:
             actions.append(f"⚠️ Low stock {r['item']} → Increase production")
-        elif r["projected_stock"]>r["safety"]*3:
+
+        elif r["projected_stock"] > r["safety"] * 3:
             actions.append(f"📦 Overstock {r['item']} → Run promotion")
 
-    return df,actions
+        else:
+            actions.append(f"✅ {r['item']} Balanced")
 
-balanced,actions=balancing_engine()
+    return df, actions
+
+
+balanced, actions = balancing_engine()
+
 # ==========================================================
 # PERSONAS FROM PROBLEM STATEMENT
 # ==========================================================
