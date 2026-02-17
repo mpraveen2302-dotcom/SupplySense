@@ -80,12 +80,12 @@ elif persona=="Supplier ABC Foods":
 
     if cur.execute("SELECT COUNT(*) FROM orders").fetchone()[0] > 0:
         return
-        items=["Milk","Bread","Eggs","Juice","Rice","Sugar","Biscuits","Oil"]
-        cats=["Dairy","Bakery","Dairy","Beverage","Grocery","Grocery","Snacks","Grocery"]
-        customers=["Retailer A","Hotel B","Online C","Supermarket D"]
-        cities=["Chennai","Madurai","Coimbatore","Salem"]
-        warehouses=["Chennai Hub","Madurai Hub","Coimbatore Hub"]
-        suppliers_list=["ABC Foods","Fresh Farms","Dairy Best"]
+    items=["Milk","Bread","Eggs","Juice","Rice","Sugar","Biscuits","Oil"]
+    cats=["Dairy","Bakery","Dairy","Beverage","Grocery","Grocery","Snacks","Grocery"]
+    customers=["Retailer A","Hotel B","Online C","Supermarket D"]
+    cities=["Chennai","Madurai","Coimbatore","Salem"]
+    warehouses=["Chennai Hub","Madurai Hub","Coimbatore Hub"]
+    suppliers_list=["ABC Foods","Fresh Farms","Dairy Best"]
 
     # ---- ORDERS ----
     for i in range(120):
