@@ -79,7 +79,7 @@ elif persona=="Supplier ABC Foods":
     cur=conn.cursor()
 
     if cur.execute("SELECT COUNT(*) FROM orders").fetchone()[0] > 0:
-        return
+    return
 
     items=["Milk","Bread","Eggs","Juice","Rice","Sugar","Biscuits","Oil"]
     cats=["Dairy","Bakery","Dairy","Beverage","Grocery","Grocery","Snacks","Grocery"]
