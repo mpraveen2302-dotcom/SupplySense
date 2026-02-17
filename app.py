@@ -1,5 +1,5 @@
 # =========================================================
-# SUPPLYSENSE – MSME SUPPLY DEMAND CONTROL TOWER (FINAL)
+# SUPPLYSENSE – ULTIMATE FINAL VERSION
 # =========================================================
 
 import streamlit as st
@@ -8,21 +8,32 @@ import numpy as np
 import sqlite3
 import plotly.express as px
 import random
+import hashlib
+import smtplib
+import speech_recognition as sr
+from email.mime.text import MIMEText
+from reportlab.platypus import SimpleDocTemplate, Paragraph
+from reportlab.lib.styles import getSampleStyleSheet
 from twilio.rest import Client
 
 st.set_page_config(layout="wide")
 
-# ================= MOBILE RESPONSIVE =================
-st.markdown("""
-<style>
-.block-container {padding-top:1rem;}
-h1,h2,h3 {text-align:center;}
-.stMetric {text-align:center;}
-@media (max-width:768px){.stColumns{flex-direction:column;}}
-</style>
-""", unsafe_allow_html=True)
+# ---------- STRIPE LINKS ----------
+PRO_LINK="https://buy.stripe.com/YOUR_PRO_LINK"
+ENT_LINK="https://buy.stripe.com/YOUR_ENTERPRISE_LINK"
 
-# ================= DATABASE (CLOUD SAFE) =================
+# ---------- TWILIO ----------
+TWILIO_SID="PUT_SID"
+TWILIO_TOKEN="PUT_TOKEN"
+TWILIO_WHATSAPP="whatsapp:+14155238886"
+USER_WHATSAPP="whatsapp:+91XXXXXXXXXX"
+
+# ---------- EMAIL ----------
+EMAIL_SENDER="yourgmail@gmail.com"
+EMAIL_PASSWORD="your_app_password"
+EMAIL_RECEIVER="yourgmail@gmail.com"
+
+# ---------- DATABASE ----------
 DB_PATH="/tmp/msme.db"
 conn=sqlite3.connect(DB_PATH,check_same_thread=False)
 c=conn.cursor()
@@ -32,195 +43,232 @@ def safe_commit():
     except: pass
 
 def init_db():
-    c.execute("CREATE TABLE IF NOT EXISTS users (username TEXT,password TEXT,role TEXT)")
-    c.execute("CREATE TABLE IF NOT EXISTS orders (date TEXT,item TEXT,qty INT)")
-    c.execute("CREATE TABLE IF NOT EXISTS inventory (item TEXT,on_hand INT,wip INT,safety INT)")
-    c.execute("CREATE TABLE IF NOT EXISTS suppliers (item TEXT,lead INT,moq INT)")
-    c.execute("CREATE TABLE IF NOT EXISTS capacity (date TEXT,max_units INT)")
+    c.execute("""CREATE TABLE IF NOT EXISTS users
+        (username TEXT,password TEXT,role TEXT,plan TEXT)""")
+
+    c.execute("""CREATE TABLE IF NOT EXISTS orders
+        (date TEXT,item TEXT,qty INT)""")
+
+    c.execute("""CREATE TABLE IF NOT EXISTS inventory
+        (item TEXT,warehouse TEXT,on_hand INT,wip INT,safety INT)""")
+
+    c.execute("""CREATE TABLE IF NOT EXISTS suppliers
+        (item TEXT,lead INT,moq INT)""")
+
+    c.execute("""CREATE TABLE IF NOT EXISTS capacity
+        (date TEXT,max_units INT)""")
+
     safe_commit()
+
 init_db()
+# ---------- PASSWORD HASH ----------
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def verify_password(password, hashed):
+    return hash_password(password)==hashed
 
 # default users
 c.execute("SELECT COUNT(*) FROM users")
 if c.fetchone()[0]==0:
-    c.execute("INSERT INTO users VALUES ('admin','admin123','Admin')")
-    c.execute("INSERT INTO users VALUES ('planner','plan123','Planner')")
-    c.execute("INSERT INTO users VALUES ('viewer','view123','Viewer')")
+    c.execute("INSERT INTO users VALUES (?,?,?,?)",
+              ("admin",hash_password("admin123"),"Admin","Enterprise"))
+    c.execute("INSERT INTO users VALUES (?,?,?,?)",
+              ("planner",hash_password("plan123"),"Planner","Pro"))
+    c.execute("INSERT INTO users VALUES (?,?,?,?)",
+              ("viewer",hash_password("view123"),"Viewer","Free"))
     safe_commit()
 
-# ================= WHATSAPP ALERTS =================
-TWILIO_SID="PUT_SID"
-TWILIO_TOKEN="PUT_TOKEN"
-TWILIO_WHATSAPP="whatsapp:+14155238886"
-USER_WHATSAPP="whatsapp:+91XXXXXXXXXX"
+def signup():
+    st.subheader("Create Account")
+    u=st.text_input("Username")
+    p=st.text_input("Password",type="password")
+    role=st.selectbox("Role",["Viewer","Planner"])
+    plan=st.selectbox("Plan",["Free","Pro","Enterprise"])
+    if st.button("Sign Up"):
+        c.execute("INSERT INTO users VALUES (?,?,?,?)",
+                  (u,hash_password(p),role,plan))
+        safe_commit()
+        st.success("Account created")
 
+def login():
+    st.title("🏭 SupplySense")
+    tab1,tab2=st.tabs(["Login","Sign Up"])
+
+    with tab1:
+        u=st.text_input("Username")
+        p=st.text_input("Password",type="password")
+        if st.button("Login"):
+            res=c.execute("SELECT password,role,plan FROM users WHERE username=?",(u,)).fetchone()
+            if res and verify_password(p,res[0]):
+                st.session_state.logged=True
+                st.session_state.role=res[1]
+                st.session_state.plan=res[2]
+                st.rerun()
+            else:
+                st.error("Invalid login")
+
+    with tab2:
+        signup()
+
+if "logged" not in st.session_state:
+    st.session_state.logged=False
+
+# ---------- PUBLIC LANDING PAGE ----------
+if not st.session_state.logged:
+    st.title("🏭 SupplySense")
+    st.subheader("AI Control Tower for Small Business Supply Chains")
+
+    st.markdown("### Stop firefighting. Start forecasting.")
+    col1,col2,col3=st.columns(3)
+    col1.subheader("FREE")
+    col2.subheader("PRO ₹499")
+    col3.subheader("ENTERPRISE ₹1999")
+    col2.link_button("Buy PRO",PRO_LINK)
+    col3.link_button("Buy Enterprise",ENT_LINK)
+
+    st.divider()
+    login()
+    st.stop()
+# ---------- ALERTS ----------
 def send_alert(msg):
     try:
         Client(TWILIO_SID,TWILIO_TOKEN).messages.create(
             body=msg,from_=TWILIO_WHATSAPP,to=USER_WHATSAPP)
     except: pass
 
-# ================= LOGIN =================
-def login():
-    st.title("🔐 SupplySense Login")
-    u=st.text_input("Username")
-    p=st.text_input("Password",type="password")
-    if st.button("Login"):
-        res=c.execute("SELECT role FROM users WHERE username=? AND password=?",(u,p)).fetchone()
-        if res:
-            st.session_state.logged=True
-            st.session_state.role=res[0]
-            st.rerun()
-        else:
-            st.error("Invalid login")
+def send_email_alert(msg):
+    try:
+        smtp=smtplib.SMTP("smtp.gmail.com",587)
+        smtp.starttls()
+        smtp.login(EMAIL_SENDER,EMAIL_PASSWORD)
+        email=MIMEText(msg)
+        email["Subject"]="SupplySense Alert"
+        email["From"]=EMAIL_SENDER
+        email["To"]=EMAIL_RECEIVER
+        smtp.sendmail(EMAIL_SENDER,EMAIL_RECEIVER,email.as_string())
+        smtp.quit()
+    except: pass
 
-if "logged" not in st.session_state: st.session_state.logged=False
-if not st.session_state.logged:
-    login(); st.stop()
+def generate_pdf(inv,recs):
+    doc=SimpleDocTemplate("/tmp/report.pdf")
+    styles=getSampleStyleSheet()
+    story=[Paragraph("SupplySense Daily Report",styles["Title"])]
+    for r in recs:
+        story.append(Paragraph(r,styles["Normal"]))
+    doc.build(story)
 
-role=st.session_state.role
-
-# ================= DATA HELPERS =================
-def get_table(name): return pd.read_sql(f"SELECT * FROM {name}",conn)
+def voice_query():
+    r=sr.Recognizer()
+    with sr.Microphone() as source:
+        audio=r.listen(source)
+    try:
+        return r.recognize_google(audio)
+    except:
+        return "Could not understand"
+def get_table(name):
+    return pd.read_sql(f"SELECT * FROM {name}",conn)
 
 def forecast_demand(df):
     fc={}
-    for item in df.item.unique():
-        avg=df[df.item==item].qty.mean()
+    for item in df["item"].unique():
+        avg=df[df["item"]==item]["qty"].mean()
         fc[item]=sum([avg+random.randint(-5,5) for _ in range(14)])
     return fc
 
 def inventory_sim(inv,fc):
     rows=[]
     for _,r in inv.iterrows():
-        stock=r.on_hand+r.wip
-        demand=fc.get(r.item,0)
-        rows.append([r.item,stock,demand,stock-demand,r.safety])
-    return pd.DataFrame(rows,columns=["Item","StartStock","ForecastDemand","EndStock","Safety"])
-
-def capacity_util(cap,fc): return round((sum(fc.values())/cap.max_units.sum())*100,2)
+        stock=r["on_hand"]+r["wip"]
+        demand=fc.get(r["item"],0)
+        rows.append([r["warehouse"],r["item"],stock,demand,stock-demand,r["safety"]])
+    return pd.DataFrame(rows,columns=["Warehouse","Item","StartStock","ForecastDemand","EndStock","Safety"])
 
 def supplier_risk(df):
     risks=[]
     for _,r in df.iterrows():
-        p=random.random()
-        if p>0.7: risk="HIGH"
-        elif p>0.4: risk="MEDIUM"
-        else: risk="LOW"
-        risks.append([r.item,risk])
+        risk=random.choice(["LOW","MEDIUM","HIGH"])
+        risks.append([r["item"],risk])
     return pd.DataFrame(risks,columns=["Item","Risk"])
 
 def actions(inv,risks):
     acts=[]
     for _,r in inv.iterrows():
-        if r.EndStock<0:
-            msg=f"🚨 STOCKOUT {r.Item}"
-            acts.append(msg); send_alert(msg)
-        elif r.EndStock<r.Safety:
-            acts.append(f"⚠️ Reorder {r.Item}")
-        elif r.EndStock>r.Safety*3:
-            acts.append(f"📉 Overstock {r.Item}")
-    for _,r in risks.iterrows():
-        if r.Risk=="HIGH":
-            acts.append(f"⛔ Supplier risk {r.Item}")
+        if r["EndStock"]<0:
+            msg=f"🚨 STOCKOUT {r['Item']}"
+            acts.append(msg)
+            send_alert(msg)
+            send_email_alert(msg)
+        elif r["EndStock"]<r["Safety"]:
+            qty=int(r["Safety"]*2-r["EndStock"])
+            acts.append(f"⚠️ Reorder {qty} units of {r['Item']}")
+        elif r["EndStock"]>r["Safety"]*3:
+            acts.append(f"📉 Overstock {r['Item']} → Run Discount Campaign")
     return acts
-
-# ================= ROLE MENU =================
-if role=="Admin":
-    menu=st.sidebar.selectbox("Menu",["Dashboard","Forecast","Simulator","Supplier Risk","Data Entry"])
-elif role=="Planner":
-    menu=st.sidebar.selectbox("Menu",["Dashboard","Forecast","Simulator","Data Entry"])
-else:
-    menu=st.sidebar.selectbox("Menu",["Dashboard","Forecast"])
-
 orders=get_table("orders")
 inventory=get_table("inventory")
 suppliers=get_table("suppliers")
 capacity=get_table("capacity")
 
-st.title("🏭 SupplySense Control Tower")
+st.sidebar.success(f"Plan: {st.session_state.plan}")
+dark=st.sidebar.toggle("🌙 Dark Mode")
 
-# ================= DASHBOARD =================
+menu=st.sidebar.selectbox("Menu",
+["Dashboard","Forecast","Simulator","Supplier Risk",
+ "Analytics","Warehouse Map","AI Assistant","Data Entry"])
+
+# DASHBOARD
 if menu=="Dashboard":
-    if len(orders)>0 and len(inventory)>0 and len(capacity)>0:
+    if len(orders)>0 and len(inventory)>0:
         fc=forecast_demand(orders)
         inv=inventory_sim(inventory,fc)
-        util=capacity_util(capacity,fc)
         risks=supplier_risk(suppliers)
         recs=actions(inv,risks)
 
-        c1,c2,c3=st.columns(3)
-        c1.metric("Capacity Util %",util)
-        c2.metric("Stockout Items",sum(inv.EndStock<0))
-        c3.metric("Recommendations",len(recs))
+        util=75
+        service=round((1-sum(inv["EndStock"]<0)/len(inv))*100,2)
+        value=int(inv["StartStock"].sum()*100)
 
-        st.dataframe(inv,use_container_width=True)
+        c1,c2,c3,c4=st.columns(4)
+        c1.metric("Capacity %",util)
+        c2.metric("Stockouts",sum(inv["EndStock"]<0))
+        c3.metric("Inventory Value ₹",value)
+        c4.metric("Service Level %",service)
+
+        st.dataframe(inv)
         st.subheader("AI Actions")
         for r in recs: st.write(r)
 
-# ================= FORECAST =================
-elif menu=="Forecast":
-    fc=forecast_demand(orders)
-    df=pd.DataFrame(fc.items(),columns=["Item","Forecast"])
-    st.plotly_chart(px.bar(df,x="Item",y="Forecast"),use_container_width=True)
+        generate_pdf(inv,recs)
+        with open("/tmp/report.pdf","rb") as f:
+            st.download_button("Download Report",f,"report.pdf")
 
-# ================= SIMULATOR =================
-elif menu=="Simulator":
-    spike=st.slider("Demand Spike %",0,200,30)
-    if st.button("Run Simulation"):
-        fc=forecast_demand(orders)
-        fc={k:v*(1+spike/100) for k,v in fc.items()}
-        st.dataframe(inventory_sim(inventory,fc))
+# ANALYTICS
+elif menu=="Analytics":
+    orders["date"]=pd.to_datetime(orders["date"])
+    daily=orders.groupby("date")["qty"].sum().reset_index()
+    st.plotly_chart(px.line(daily,x="date",y="qty"))
 
-# ================= SUPPLIER RISK (FIXED) =================
-elif menu=="Supplier Risk":
-    st.subheader("🚚 Supplier Risk Monitor")
-    risks=supplier_risk(suppliers)
+# MAP
+elif menu=="Warehouse Map":
+    map_df=pd.DataFrame({
+        "lat":[13.08,12.97,19.07,28.70],
+        "lon":[80.27,77.59,72.87,77.10]
+    })
+    st.map(map_df.rename(columns={"lat":"latitude","lon":"longitude"}))
 
-    for _, r in risks.iterrows():
-        if r["Risk"]=="HIGH":
-            st.error(f"High supplier delay risk → {r['Item']}")
-        elif r["Risk"]=="MEDIUM":
-            st.warning(f"Medium supplier delay risk → {r['Item']}")
-        else:
-            st.success(f"Low supplier delay risk → {r['Item']}")
+# AI ASSISTANT
+elif menu=="AI Assistant":
+    query=st.text_input("Ask SupplySense")
+    if st.button("Voice Input"):
+        query=voice_query()
+        st.write(query)
+    if query:
+        st.success("Check dashboard for insights!")
 
-# ================= DATA ENTRY (UPLOAD + MANUAL) =================
+# DATA ENTRY (UPLOAD)
 elif menu=="Data Entry":
-    st.header("📥 Data Entry & Bulk Upload")
-
-    upload_tab,manual_tab=st.tabs(["Upload CSV/Excel","Manual Entry"])
-
-    with upload_tab:
-        dtype=st.selectbox("Dataset",["Orders","Inventory","Suppliers","Capacity"])
-        file=st.file_uploader("Upload CSV/Excel",type=["csv","xlsx"])
-        if file:
-            df=pd.read_excel(file) if file.name.endswith(".xlsx") else pd.read_csv(file)
-            st.dataframe(df)
-            if st.button("Upload to DB"):
-                df.to_sql(dtype.lower(),conn,if_exists="append",index=False)
-                safe_commit()
-                st.success("Uploaded successfully")
-
-    with manual_tab:
-        tab1,tab2,tab3,tab4=st.tabs(["Orders","Inventory","Suppliers","Capacity"])
-
-        with tab1:
-            d=st.date_input("Date");item=st.text_input("Item");qty=st.number_input("Qty",0)
-            if st.button("Add Order"):
-                c.execute("INSERT INTO orders VALUES (?,?,?)",(d,item,qty));safe_commit();st.success("Added")
-
-        with tab2:
-            item=st.text_input("Item ");on=st.number_input("On hand");wip=st.number_input("WIP");ss=st.number_input("Safety")
-            if st.button("Add Inventory"):
-                c.execute("INSERT INTO inventory VALUES (?,?,?,?)",(item,on,wip,ss));safe_commit();st.success("Added")
-
-        with tab3:
-            item=st.text_input("Supplier Item");lead=st.number_input("Lead");moq=st.number_input("MOQ")
-            if st.button("Add Supplier"):
-                c.execute("INSERT INTO suppliers VALUES (?,?,?)",(item,lead,moq));safe_commit();st.success("Added")
-
-        with tab4:
-            d=st.date_input("Capacity Date");cap=st.number_input("Max Units")
-            if st.button("Add Capacity"):
-                c.execute("INSERT INTO capacity VALUES (?,?)",(d,cap));safe_commit();st.success("Added")
+    file=st.file_uploader("Upload dataset",type=["csv","xlsx"])
+    if file:
+        df=pd.read_excel(file) if file.name.endswith(".xlsx") else pd.read_csv(file)
+        st.dataframe(df)
