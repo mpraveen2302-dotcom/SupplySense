@@ -209,7 +209,9 @@ if menu=="Control Tower":
 
     c1,c2,c3=st.columns(3)
     c1.metric("Orders",len(orders))
-    c2.metric("Inventory Items",len(inventory))
+    unique_items = inventory["item"].nunique() if "item" in inventory.columns else 0
+    c2.metric("Inventory SKUs", unique_items)
+
     c3.metric("Alerts",len(actions))
 
     st.subheader("⚠️ Recommended Actions")
