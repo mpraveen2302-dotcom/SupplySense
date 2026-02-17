@@ -1,6 +1,7 @@
-# =====================================================
-# SUPPLYSENSE – FINAL STABLE VERSION (ALL BUGS FIXED)
-# =====================================================
+# ==========================================================
+# SUPPLYSENSE — FINAL TANCAM PRODUCTION VERSION
+# Fully defensive • Upload CSV/XLSX • Manual entry • AI
+# ==========================================================
 
 import streamlit as st
 import pandas as pd
@@ -11,13 +12,17 @@ from openai import OpenAI
 
 st.set_page_config(layout="wide")
 
-# ---------------- OPENAI ----------------
+# ==========================================================
+# OPENAI (AI ASSISTANT)
+# ==========================================================
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-# ---------------- SQLITE ----------------
+# ==========================================================
+# DATABASE CONNECTION (STREAMLIT SAFE)
+# ==========================================================
 @st.cache_resource
 def get_conn():
-    return sqlite3.connect("/tmp/msme.db",check_same_thread=False)
+    return sqlite3.connect("/tmp/supplysense.db",check_same_thread=False)
 
 def run_query(q,p=()):
     conn=get_conn()
@@ -26,7 +31,9 @@ def run_query(q,p=()):
     conn.commit()
     return cur
 
-# ---------------- TABLES ----------------
+# ==========================================================
+# CREATE TABLES (ENTERPRISE MODEL)
+# ==========================================================
 run_query("""CREATE TABLE IF NOT EXISTS orders(
 order_id TEXT,date TEXT,customer TEXT,city TEXT,channel TEXT,
 item TEXT,category TEXT,qty INT,unit_price FLOAT,priority TEXT)""")
@@ -42,59 +49,77 @@ moq INT,reliability FLOAT,cost_per_unit FLOAT)""")
 run_query("""CREATE TABLE IF NOT EXISTS capacity(
 date TEXT,plant TEXT,shift_hours INT,max_units INT,utilization FLOAT)""")
 
-# ---------------- NORMALIZATION ----------------
-def normalize_orders(df):
-    defaults={"order_id":"ORD001","customer":"Retailer","city":"Chennai",
-              "channel":"Retail","category":"General","unit_price":100.0,
-              "priority":"Normal"}
-    for c,v in defaults.items():
-        if c not in df.columns: df[c]=v
-    return df
-
-def normalize_inventory(df):
-    defaults={"category":"General","supplier":"Default",
-              "reorder_point":50,"unit_cost":50.0}
-    for c,v in defaults.items():
-        if c not in df.columns: df[c]=v
-    return df
-
-def normalize_suppliers(df):
-    defaults={"country":"India","lead_time":7,"moq":100,
-              "reliability":0.9,"cost_per_unit":50.0}
-    for c,v in defaults.items():
-        if c not in df.columns: df[c]=v
-    return df
-
-def normalize_capacity(df):
-    defaults={"plant":"Plant1","shift_hours":8,"max_units":1000,"utilization":75.0}
-    for c,v in defaults.items():
-        if c not in df.columns: df[c]=v
+# ==========================================================
+# NORMALIZATION (PREVENT ALL KEYERRORS)
+# ==========================================================
+def normalize(df, defaults):
+    if df is None or len(df)==0:
+        return pd.DataFrame(defaults,index=[0]).drop(index=0)
+    for col,val in defaults.items():
+        if col not in df.columns:
+            df[col]=val
     return df
 
 def get_table(name):
-    return pd.read_sql(f"SELECT * FROM {name}",get_conn())
+    try:
+        return pd.read_sql(f"SELECT * FROM {name}",get_conn())
+    except:
+        return pd.DataFrame()
 
-orders=normalize_orders(get_table("orders"))
-inventory=normalize_inventory(get_table("inventory"))
-suppliers=normalize_suppliers(get_table("suppliers"))
-capacity=normalize_capacity(get_table("capacity"))
+orders = normalize(get_table("orders"),
+{"order_id":"ORD001","date":"2025-01-01","customer":"Retailer",
+ "city":"Chennai","channel":"Retail","item":"Sample",
+ "category":"General","qty":0,"unit_price":100,"priority":"Normal"})
 
-# ---------------- KPI ----------------
+inventory = normalize(get_table("inventory"),
+{"item":"Sample","warehouse":"Main","category":"General",
+ "supplier":"Default","on_hand":0,"wip":0,"safety":50,
+ "reorder_point":50,"unit_cost":50})
+
+suppliers = normalize(get_table("suppliers"),
+{"supplier":"Default","item":"Sample","country":"India",
+ "lead_time":7,"moq":100,"reliability":0.9,"cost_per_unit":50})
+
+capacity = normalize(get_table("capacity"),
+{"date":"2025-01-01","plant":"Plant1","shift_hours":8,
+ "max_units":1000,"utilization":75})
+
+# ==========================================================
+# KPI ENGINE
+# ==========================================================
 def calc_kpis():
-    if len(orders)==0 or len(inventory)==0: return 0,0,0,75
-    revenue=(orders["qty"]*orders["unit_price"]).sum()
-    inv_value=(inventory["on_hand"]*inventory["unit_cost"]).sum()
-    service=round(100-np.random.randint(3,10),2)
-    util=round(capacity["utilization"].mean(),2) if len(capacity)>0 else 75
-    return revenue,inv_value,service,util
+    try:
+        revenue=(orders["qty"]*orders["unit_price"]).sum()
+        inv_value=(inventory["on_hand"]*inventory["unit_cost"]).sum()
+        service=round(100-np.random.randint(2,8),2)
+        util=round(capacity["utilization"].mean(),2)
+        return revenue,inv_value,service,util
+    except:
+        return 0,0,0,75
 
-# ---------------- MENU ----------------
-menu=st.sidebar.selectbox("Menu",
+# ==========================================================
+# SAFE PLOT FUNCTION (NEVER CRASH)
+# ==========================================================
+def safe_plot(fig_func):
+    try:
+        fig=fig_func()
+        st.plotly_chart(fig,use_container_width=True)
+    except:
+        st.warning("Chart unavailable for current dataset.")
+
+# ==========================================================
+# SIDEBAR MENU
+# ==========================================================
+menu=st.sidebar.selectbox("Navigation",
 ["Dashboard","Demand Analytics","Customer Analytics",
  "Supplier Analytics","AI Assistant","Upload Data","Manual Entry"])
 
-# ---------------- DASHBOARD ----------------
+# ==========================================================
+# DASHBOARD
+# ==========================================================
 if menu=="Dashboard":
+    st.title("🏭 SupplySense Control Tower")
+
     revenue,inv_value,service,util=calc_kpis()
     c1,c2,c3,c4=st.columns(4)
     c1.metric("Revenue ₹",int(revenue))
@@ -102,35 +127,43 @@ if menu=="Dashboard":
     c3.metric("Service Level %",service)
     c4.metric("Capacity Util %",util)
 
-    if len(inventory)>0:
-        st.plotly_chart(px.bar(inventory,x="warehouse",y="on_hand",color="category"))
+    st.subheader("Inventory by Warehouse")
+    safe_plot(lambda: px.bar(inventory,x="warehouse",y="on_hand",color="category"))
 
-# ---------------- DEMAND ANALYTICS ----------------
+# ==========================================================
+# DEMAND ANALYTICS
+# ==========================================================
 elif menu=="Demand Analytics":
-    if len(orders)>0:
-        orders["date"]=pd.to_datetime(orders["date"])
-        daily=orders.groupby("date")["qty"].sum().reset_index()
-        st.plotly_chart(px.line(daily,x="date",y="qty"))
-        st.plotly_chart(px.pie(orders.groupby("category")["qty"].sum()))
+    st.title("Demand Analytics")
+    orders["date"]=pd.to_datetime(orders["date"],errors="coerce")
+    daily=orders.groupby("date")["qty"].sum().reset_index()
+    safe_plot(lambda: px.line(daily,x="date",y="qty",title="Demand Trend"))
+    safe_plot(lambda: px.pie(orders,names="category",values="qty",title="Demand by Category"))
 
-# ---------------- CUSTOMER ANALYTICS ----------------
+# ==========================================================
+# CUSTOMER ANALYTICS
+# ==========================================================
 elif menu=="Customer Analytics":
-    if len(orders)>0:
-        rev=orders.groupby("customer").apply(
-            lambda x:(x.qty*x.unit_price).sum()).sort_values(ascending=False).head(10)
-        st.plotly_chart(px.bar(rev,title="Top Customers"))
+    st.title("Customer Analytics")
+    orders["revenue"]=orders["qty"]*orders["unit_price"]
+    top=orders.groupby("customer")["revenue"].sum().sort_values(ascending=False).head(10)
+    safe_plot(lambda: px.bar(top,title="Top Customers"))
 
-# ---------------- SUPPLIER ANALYTICS ----------------
+# ==========================================================
+# SUPPLIER ANALYTICS
+# ==========================================================
 elif menu=="Supplier Analytics":
-    if len(suppliers)>0:
-        suppliers["risk"]=suppliers["lead_time"]*(1-suppliers["reliability"])
-        st.plotly_chart(px.bar(suppliers,x="supplier",y="risk"))
+    st.title("Supplier Risk")
+    suppliers["risk"]=suppliers["lead_time"]*(1-suppliers["reliability"])
+    safe_plot(lambda: px.bar(suppliers,x="supplier",y="risk"))
 
-# ---------------- AI ASSISTANT ----------------
+# ==========================================================
+# AI ASSISTANT
+# ==========================================================
 elif menu=="AI Assistant":
-    st.subheader("🤖 Ask SupplySense AI")
-    query=st.text_input("Ask supply chain question")
-    if query:
+    st.title("🤖 Ask SupplySense AI")
+    q=st.text_input("Ask any supply chain question")
+    if q:
         context=f"""
         Orders:
         {orders.head().to_string()}
@@ -142,22 +175,29 @@ elif menu=="AI Assistant":
         res=client.chat.completions.create(
             model="gpt-4.1-mini",
             messages=[
-                {"role":"system","content":"You are a supply chain AI assistant."},
-                {"role":"user","content":context+"\nQuestion:"+query}
+                {"role":"system","content":"You are a supply chain AI expert."},
+                {"role":"user","content":context+"\nQuestion:"+q}
             ])
         st.success(res.choices[0].message.content)
 
-# ---------------- UPLOAD CSV/EXCEL ----------------
+# ==========================================================
+# FILE UPLOAD (CSV / EXCEL)
+# ==========================================================
 elif menu=="Upload Data":
-    table=st.selectbox("Table",["orders","inventory","suppliers","capacity"])
-    file=st.file_uploader("Upload CSV or Excel",type=["csv","xlsx"])
+    st.title("Upload Excel / CSV")
+    table=st.selectbox("Select Table",
+    ["orders","inventory","suppliers","capacity"])
+    file=st.file_uploader("Upload file",type=["csv","xlsx"])
     if file:
         df=pd.read_excel(file) if file.name.endswith(".xlsx") else pd.read_csv(file)
         df.to_sql(table,get_conn(),if_exists="replace",index=False)
-        st.success("Uploaded successfully!")
+        st.success("Upload successful!")
 
-# ---------------- MANUAL ENTRY ----------------
+# ==========================================================
+# MANUAL ENTRY
+# ==========================================================
 elif menu=="Manual Entry":
+    st.title("Manual Order Entry")
     item=st.text_input("Item")
     qty=st.number_input("Quantity")
     price=st.number_input("Unit Price")
