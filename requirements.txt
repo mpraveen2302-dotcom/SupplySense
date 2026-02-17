@@ -5,3 +5,4 @@ plotly
 twilio
 reportlab
 openpyxl
+openai
