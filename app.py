@@ -199,19 +199,55 @@ elif menu=="Analytics":
 elif menu=="AI Assistant":
     st.title("🤖 Ask SupplySense")
 
-    q=st.text_input("Ask planning question")
+    q = st.text_input("Ask planning question")
 
     if q:
+
+        # -------- TRY REAL AI FIRST --------
         if AI_AVAILABLE:
-            context=f"Inventory:\n{inventory.head()}\nOrders:\n{orders.head()}"
-            res=client.chat.completions.create(
-                model="gpt-4.1-mini",
-                messages=[{"role":"user","content":context+"\n"+q}]
-            )
-            st.success(res.choices[0].message.content)
+            try:
+                context = f"""
+                Inventory:
+                {inventory.head()}
+
+                Orders:
+                {orders.head()}
+
+                Supplier lead times:
+                {suppliers.head()}
+                """
+
+                res = client.chat.completions.create(
+                    model="gpt-4.1-mini",
+                    messages=[
+                        {"role":"system","content":"You are a supply chain planning assistant."},
+                        {"role":"user","content":context + "\nQuestion: " + q}
+                    ]
+                )
+
+                st.success(res.choices[0].message.content)
+
+            except Exception:
+                st.warning("AI cloud unavailable → switching to built-in planner")
+                AI_AVAILABLE_LOCAL = False
         else:
-            st.info("AI offline → Showing rule-based insights")
-            st.write("Review low stock alerts & supplier lead times.")
+            AI_AVAILABLE_LOCAL = False
+
+        # -------- FALLBACK RULE ENGINE --------
+        if not AI_AVAILABLE or 'AI_AVAILABLE_LOCAL' in locals():
+
+            low_stock = balanced[balanced["projected_stock"] < balanced["safety"]]
+
+            st.info("📊 Built-in SupplySense Planner")
+
+            if len(low_stock) > 0:
+                for item in low_stock["item"].tolist():
+                    st.write(f"• Consider expediting purchase for **{item}**")
+
+            st.write("• Review supplier lead times")
+            st.write("• Consider adjusting batch sizes")
+            st.write("• Monitor demand spikes weekly")
+
 elif menu=="Upload Data":
     table=st.selectbox("Table",["orders","inventory","suppliers"])
     file=st.file_uploader("Upload CSV/Excel",type=["csv","xlsx"])
