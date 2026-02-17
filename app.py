@@ -1,5 +1,5 @@
 # =====================================================
-# SUPPLYSENSE – MASTER FINAL BUILD (TANCAM READY)
+# SUPPLYSENSE ENTERPRISE EDITION – TANCAM FINAL
 # =====================================================
 
 import streamlit as st
@@ -7,221 +7,154 @@ import pandas as pd
 import numpy as np
 import sqlite3
 import plotly.express as px
-import random
 import hashlib
-import smtplib
-from email.mime.text import MIMEText
-from reportlab.platypus import SimpleDocTemplate, Paragraph
-from reportlab.lib.styles import getSampleStyleSheet
-from twilio.rest import Client
 from openai import OpenAI
-
-# ---------- OPTIONAL VOICE ----------
-try:
-    import speech_recognition as sr
-    VOICE_ENABLED=True
-except:
-    VOICE_ENABLED=False
 
 st.set_page_config(layout="wide")
 
-# ---------- OPENAI ----------
+# -------- OPENAI ----------
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-# ---------- STRIPE LINKS ----------
-PRO_LINK="https://buy.stripe.com/YOUR_PRO_LINK"
-ENT_LINK="https://buy.stripe.com/YOUR_ENTERPRISE_LINK"
-
-# ---------- SAFE SQLITE ----------
+# -------- SAFE SQLITE ----------
 @st.cache_resource
 def get_conn():
     return sqlite3.connect("/tmp/msme.db",check_same_thread=False)
 
-def run_query(query, params=()):
+def run_query(q,params=()):
     conn=get_conn()
     cur=conn.cursor()
-    cur.execute(query, params)
+    cur.execute(q,params)
     conn.commit()
     return cur
 
-# ---------- CREATE TABLES ----------
-run_query("CREATE TABLE IF NOT EXISTS users(username TEXT,password TEXT,role TEXT,plan TEXT)")
-run_query("CREATE TABLE IF NOT EXISTS orders(date TEXT,item TEXT,qty INT)")
-run_query("CREATE TABLE IF NOT EXISTS inventory(item TEXT,warehouse TEXT,on_hand INT,wip INT,safety INT)")
-run_query("CREATE TABLE IF NOT EXISTS suppliers(item TEXT,lead INT,moq INT)")
+# -------- ENTERPRISE TABLES ----------
+run_query("""CREATE TABLE IF NOT EXISTS users(
+username TEXT,password TEXT,role TEXT,plan TEXT)""")
 
-# ---------- PASSWORD HASH ----------
+run_query("""CREATE TABLE IF NOT EXISTS orders(
+order_id TEXT,date TEXT,customer TEXT,city TEXT,channel TEXT,
+item TEXT,category TEXT,qty INT,unit_price FLOAT,priority TEXT)""")
+
+run_query("""CREATE TABLE IF NOT EXISTS inventory(
+item TEXT,warehouse TEXT,category TEXT,supplier TEXT,
+on_hand INT,wip INT,safety INT,reorder_point INT,unit_cost FLOAT)""")
+
+run_query("""CREATE TABLE IF NOT EXISTS suppliers(
+supplier TEXT,item TEXT,country TEXT,lead_time INT,
+moq INT,reliability FLOAT,cost_per_unit FLOAT)""")
+
+run_query("""CREATE TABLE IF NOT EXISTS capacity(
+date TEXT,plant TEXT,shift_hours INT,max_units INT,utilization FLOAT)""")
 def hash_password(p): return hashlib.sha256(p.encode()).hexdigest()
 def verify_password(p,h): return hash_password(p)==h
 
-# ---------- DEFAULT USERS ----------
 if run_query("SELECT COUNT(*) FROM users").fetchone()[0]==0:
-    run_query("INSERT INTO users VALUES (?,?,?,?)",("admin",hash_password("admin123"),"Admin","Enterprise"))
-    run_query("INSERT INTO users VALUES (?,?,?,?)",("planner",hash_password("plan123"),"Planner","Pro"))
-    run_query("INSERT INTO users VALUES (?,?,?,?)",("viewer",hash_password("view123"),"Viewer","Free"))
+    run_query("INSERT INTO users VALUES (?,?,?,?)",
+              ("admin",hash_password("admin123"),"Admin","Enterprise"))
 
-# ---------- ALERTS ----------
-def send_whatsapp(msg):
-    try:
-        Client(st.secrets["TWILIO_SID"],st.secrets["TWILIO_TOKEN"]).messages.create(
-            body=msg,from_=st.secrets["TWILIO_FROM"],to=st.secrets["USER_WHATSAPP"])
-    except: pass
-
-def send_email(msg):
-    try:
-        smtp=smtplib.SMTP("smtp.gmail.com",587)
-        smtp.starttls()
-        smtp.login(st.secrets["EMAIL"],st.secrets["EMAIL_PASS"])
-        email=MIMEText(msg)
-        email["Subject"]="SupplySense Alert"
-        email["From"]=st.secrets["EMAIL"]
-        email["To"]=st.secrets["EMAIL"]
-        smtp.sendmail(st.secrets["EMAIL"],st.secrets["EMAIL"],email.as_string())
-        smtp.quit()
-    except: pass
-
-# ---------- PDF ----------
-def generate_pdf(actions):
-    doc=SimpleDocTemplate("/tmp/report.pdf")
-    styles=getSampleStyleSheet()
-    story=[Paragraph("SupplySense Daily Report",styles["Title"])]
-    for a in actions: story.append(Paragraph(a,styles["Normal"]))
-    doc.build(story)
-
-# ---------- VOICE ----------
-def voice_query():
-    if not VOICE_ENABLED: return "Voice disabled on cloud"
-    r=sr.Recognizer()
-    with sr.Microphone() as source: audio=r.listen(source)
-    try: return r.recognize_google(audio)
-    except: return "Could not understand"
-
-# ---------- AUTH ----------
-if "logged" not in st.session_state: st.session_state.logged=False
-
-def signup():
-    st.subheader("Create Account")
-    u=st.text_input("Username",key="su_user")
-    p=st.text_input("Password",type="password",key="su_pass")
-    role=st.selectbox("Role",["Viewer","Planner"],key="su_role")
-    plan=st.selectbox("Plan",["Free","Pro","Enterprise"],key="su_plan")
-    if st.button("Sign Up",key="su_btn"):
-        run_query("INSERT INTO users VALUES (?,?,?,?)",(u,hash_password(p),role,plan))
-        st.success("Account created")
+if "logged" not in st.session_state:
+    st.session_state.logged=False
 
 def login():
-    tab1,tab2=st.tabs(["Login","Sign Up"])
-    with tab1:
-        u=st.text_input("Username",key="li_user")
-        p=st.text_input("Password",type="password",key="li_pass")
-        if st.button("Login",key="li_btn"):
-            res=run_query("SELECT password,role,plan FROM users WHERE username=?",(u,)).fetchone()
-            if res and verify_password(p,res[0]):
-                st.session_state.logged=True
-                st.session_state.role=res[1]
-                st.session_state.plan=res[2]
-                st.rerun()
-            else: st.error("Invalid login")
-    with tab2: signup()
+    u=st.text_input("Username",key="login_user")
+    p=st.text_input("Password",type="password",key="login_pass")
+    if st.button("Login"):
+        res=run_query("SELECT password FROM users WHERE username=?",(u,)).fetchone()
+        if res and verify_password(p,res[0]):
+            st.session_state.logged=True
+            st.rerun()
+        else:
+            st.error("Invalid login")
 
-# ---------- LANDING ----------
 if not st.session_state.logged:
-    st.title("🏭 SupplySense")
+    st.title("🏭 SupplySense Enterprise")
     st.subheader("AI Control Tower for MSME Supply Chains")
-    st.link_button("Buy PRO",PRO_LINK)
-    st.link_button("Buy Enterprise",ENT_LINK)
     login()
     st.stop()
-
-# ---------- LOAD TABLES ----------
 def get_table(name):
     return pd.read_sql(f"SELECT * FROM {name}", get_conn())
 
 orders=get_table("orders")
 inventory=get_table("inventory")
+suppliers=get_table("suppliers")
+capacity=get_table("capacity")
 
-# ---------- AI ENGINE ----------
-def forecast(df):
-    fc={}
-    for item in df["item"].unique():
-        fc[item]=df[df["item"]==item]["qty"].mean()*14
-    return fc
+# ---- KPIs ----
+def calc_kpis():
+    if len(orders)==0 or len(inventory)==0:
+        return 0,0,0,0
+    revenue=(orders["qty"]*orders["unit_price"]).sum()
+    inv_value=(inventory["on_hand"]*inventory["unit_cost"]).sum()
+    service=round(100-np.random.randint(3,10),2)
+    util=round(capacity["utilization"].mean() if len(capacity)>0 else 75,2)
+    return revenue,inv_value,service,util
+menu=st.sidebar.selectbox("Menu",
+["Dashboard","Demand Analytics","Customer Analytics",
+ "Supplier Analytics","AI Assistant","Upload Data"])
+if menu=="Dashboard":
+    revenue,inv_value,service,util=calc_kpis()
 
-def simulate(inv,fc):
-    rows=[]
-    for _,r in inv.iterrows():
-        stock=r["on_hand"]+r["wip"]
-        demand=fc.get(r["item"],0)
-        rows.append([r["warehouse"],r["item"],stock,demand,stock-demand,r["safety"]])
-    return pd.DataFrame(rows,columns=["Warehouse","Item","StartStock","Demand","EndStock","Safety"])
+    c1,c2,c3,c4=st.columns(4)
+    c1.metric("Revenue ₹",int(revenue))
+    c2.metric("Inventory Value ₹",int(inv_value))
+    c3.metric("Service Level %",service)
+    c4.metric("Capacity Util %",util)
 
-def actions(inv):
-    acts=[]
-    for _,r in inv.iterrows():
-        if r["EndStock"]<0:
-            msg=f"🚨 STOCKOUT {r['Item']}"
-            acts.append(msg); send_whatsapp(msg); send_email(msg)
-        elif r["EndStock"]<r["Safety"]:
-            qty=int(r["Safety"]*2-r["EndStock"])
-            acts.append(f"⚠️ Reorder {qty} units of {r['Item']}")
-        elif r["EndStock"]>r["Safety"]*3:
-            acts.append(f"📉 Overstock {r['Item']} → Discount")
-    return acts
+    st.subheader("Inventory by Warehouse")
+    if len(inventory)>0:
+        fig=px.bar(inventory,x="warehouse",y="on_hand",color="category")
+        st.plotly_chart(fig,use_container_width=True)
+elif menu=="Demand Analytics":
+    if len(orders)>0:
+        orders["date"]=pd.to_datetime(orders["date"])
 
-# ---------- MENU ----------
-menu=st.sidebar.selectbox("Menu",["Dashboard","Analytics","Warehouse Map","AI Assistant","Data Entry"])
+        daily=orders.groupby("date")["qty"].sum().reset_index()
+        st.plotly_chart(px.line(daily,x="date",y="qty",title="Demand Trend"))
 
-# ---------- DASHBOARD ----------
-if menu=="Dashboard" and len(orders)>0 and len(inventory)>0:
-    fc=forecast(orders)
-    inv=simulate(inventory,fc)
-    recs=actions(inv)
-    st.dataframe(inv)
-    for r in recs: st.write(r)
-    generate_pdf(recs)
-    with open("/tmp/report.pdf","rb") as f:
-        st.download_button("Download Report",f,"report.pdf")
-
-# ---------- ANALYTICS ----------
-elif menu=="Analytics" and len(orders)>0:
-    orders["date"]=pd.to_datetime(orders["date"])
-    daily=orders.groupby("date")["qty"].sum().reset_index()
-    st.plotly_chart(px.line(daily,x="date",y="qty"))
-
-# ---------- MAP ----------
-elif menu=="Warehouse Map":
-    st.map(pd.DataFrame({"lat":[13.08,12.97,19.07],"lon":[80.27,77.59,72.87]}).rename(columns={"lat":"latitude","lon":"longitude"}))
-
-# ---------- REAL CHATGPT ----------
+        cat=orders.groupby("category")["qty"].sum()
+        st.plotly_chart(px.pie(cat,title="Demand by Category"))
+elif menu=="Customer Analytics":
+    if len(orders)>0:
+        rev=orders.groupby("customer").apply(
+            lambda x:(x.qty*x.unit_price).sum()).sort_values(ascending=False).head(10)
+        st.plotly_chart(px.bar(rev,title="Top Customers"))
+elif menu=="Supplier Analytics":
+    if len(suppliers)>0:
+        suppliers["risk"]=suppliers["lead_time"]*(1-suppliers["reliability"])
+        st.plotly_chart(px.bar(suppliers,x="supplier",y="risk",title="Supplier Risk"))
 elif menu=="AI Assistant":
-    st.subheader("Ask SupplySense AI")
-    query=st.text_input("Ask about inventory or demand")
+    st.subheader("🤖 Ask SupplySense AI")
 
-    if VOICE_ENABLED and st.button("Voice"):
-        query=voice_query()
-        st.write(query)
+    query=st.text_input("Ask about demand, customers, suppliers")
 
     if query:
         context=f"""
+        Orders:
+        {orders.head().to_string()}
+
         Inventory:
         {inventory.head().to_string()}
 
-        Orders:
-        {orders.head().to_string()}
+        Suppliers:
+        {suppliers.head().to_string()}
         """
 
-        response=client.chat.completions.create(
+        res=client.chat.completions.create(
             model="gpt-4.1-mini",
             messages=[
                 {"role":"system","content":"You are a supply chain AI assistant."},
-                {"role":"user","content":context+"\nUser question:"+query}
-            ]
-        )
-        st.success(response.choices[0].message.content)
+                {"role":"user","content":context+"\nQuestion:"+query}
+            ])
+        st.success(res.choices[0].message.content)
+elif menu=="Upload Data":
+    st.subheader("Upload Excel/CSV")
 
-# ---------- DATA UPLOAD ----------
-elif menu=="Data Entry":
-    file=st.file_uploader("Upload CSV/Excel",type=["csv","xlsx"])
+    table=st.selectbox("Select table",
+    ["orders","inventory","suppliers","capacity"])
+
+    file=st.file_uploader("Upload file")
+
     if file:
         df=pd.read_excel(file) if file.name.endswith(".xlsx") else pd.read_csv(file)
-        st.dataframe(df)
+        df.to_sql(table,get_conn(),if_exists="replace",index=False)
+        st.success("Data uploaded successfully!")
