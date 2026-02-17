@@ -49,6 +49,31 @@ moq INT,reliability FLOAT,cost_per_unit FLOAT)""")
 # AUTO DEMO DATA → makes analytics dynamic instantly
 # ==========================================================
 def seed_demo_data():
+    st.sidebar.title("👥 MSME Personas")
+
+persona = st.sidebar.selectbox(
+    "Choose Persona",
+    ["Owner Rajesh","Planner Kavitha","Warehouse Arun","Supplier ABC Foods"]
+)
+
+persona_key = {
+    "Owner Rajesh":"rajesh",
+    "Planner Kavitha":"kavitha",
+    "Warehouse Arun":"arun",
+    "Supplier ABC Foods":"supplier"
+}[persona]
+
+if persona=="Owner Rajesh":
+    st.sidebar.info("Concern: Cash flow & missed deliveries")
+elif persona=="Planner Kavitha":
+    st.sidebar.info("Concern: Rescheduling & firefighting")
+elif persona=="Warehouse Arun":
+    st.sidebar.info("Concern: Overstock & storage space")
+elif persona=="Supplier ABC Foods":
+    st.sidebar.info("Concern: Sudden urgent purchase orders")
+
+
+        
 
     conn=get_conn()
     cur=conn.cursor()
@@ -96,17 +121,18 @@ def seed_demo_data():
 
 seed_demo_data()
 def get_table(name):
+    orders = get_table(f"orders_{persona_key}")
+    inventory = get_table(f"inventory_{persona_key}")
+    suppliers = get_table(f"suppliers_{persona_key}")
+    
+
+
     try:
         return pd.read_sql(f"SELECT * FROM {name}",get_conn())
     except:
         return pd.DataFrame()
 
-# ==========================================================
-# LOAD DATA FOR SELECTED PERSONA
-# ==========================================================
-orders = get_table(f"orders_{persona_key}")
-inventory = get_table(f"inventory_{persona_key}")
-suppliers = get_table(f"suppliers_{persona_key}")
+
 
 
 # ==========================================================
@@ -180,8 +206,6 @@ def balancing_engine():
     return df, actions
 
 
-balanced, actions = balancing_engine()
-
 # ==========================================================
 # PERSONAS FROM PROBLEM STATEMENT
 # ==========================================================
@@ -220,6 +244,8 @@ def safe_bar_chart(df,x,y,color=None,title="Chart"):
         st.plotly_chart(fig,use_container_width=True)
     except:
         st.warning("Not enough data to display this chart yet.")
+balanced, actions = balancing_engine()
+
 menu=st.sidebar.selectbox("Navigation",
 ["Control Tower","Analytics","AI Assistant","Upload Data","Manual Entry"])
 
