@@ -1,6 +1,6 @@
 # ==========================================================
-# SUPPLYSENSE – FINAL TANCAM VERSION (FULL SYSTEM)
-# Real-time Supply–Demand Balancing for MSMEs
+# SUPPLYSENSE – FINAL MASTER BUILD (TANCAM READY)
+# Real-Time Supply–Demand Balancing Control Tower for MSMEs
 # ==========================================================
 
 import streamlit as st
@@ -9,7 +9,7 @@ import numpy as np
 import sqlite3
 import plotly.express as px
 
-# ---------- SAFE AI IMPORT ----------
+# ---------- SAFE OPENAI IMPORT ----------
 AI_AVAILABLE = True
 try:
     from openai import OpenAI
@@ -20,19 +20,20 @@ except:
 st.set_page_config(layout="wide")
 
 # ==========================================================
-# DATABASE
+# DATABASE CONNECTION (STREAMLIT SAFE SQLITE)
 # ==========================================================
 @st.cache_resource
 def get_conn():
-    return sqlite3.connect("/tmp/supplysense.db",check_same_thread=False)
+    return sqlite3.connect("/tmp/supplysense.db", check_same_thread=False)
 
 def run_query(q,p=()):
     conn=get_conn()
     cur=conn.cursor()
     cur.execute(q,p)
     conn.commit()
-
-# ---------- TABLES ----------
+# ==========================================================
+# CREATE ENTERPRISE TABLES
+# ==========================================================
 run_query("""CREATE TABLE IF NOT EXISTS orders(
 order_id TEXT,date TEXT,customer TEXT,city TEXT,channel TEXT,
 item TEXT,category TEXT,qty INT,unit_price FLOAT,priority TEXT)""")
@@ -44,13 +45,14 @@ on_hand INT,wip INT,safety INT,reorder_point INT,unit_cost FLOAT)""")
 run_query("""CREATE TABLE IF NOT EXISTS suppliers(
 supplier TEXT,item TEXT,country TEXT,lead_time INT,
 moq INT,reliability FLOAT,cost_per_unit FLOAT)""")
-
 # ==========================================================
-# AUTO DEMO DATA (FOR LIVE ANALYTICS)
+# AUTO DEMO DATA → makes analytics dynamic instantly
 # ==========================================================
 def seed_demo_data():
+
     conn=get_conn()
     cur=conn.cursor()
+
     if cur.execute("SELECT COUNT(*) FROM orders").fetchone()[0] > 0:
         return
 
@@ -61,6 +63,7 @@ def seed_demo_data():
     warehouses=["Chennai Hub","Madurai Hub","Coimbatore Hub"]
     suppliers_list=["ABC Foods","Fresh Farms","Dairy Best"]
 
+    # ---- ORDERS ----
     for i in range(120):
         idx=np.random.randint(0,len(items))
         cur.execute("INSERT INTO orders VALUES (?,?,?,?,?,?,?,?,?,?)",
@@ -71,6 +74,7 @@ def seed_demo_data():
          np.random.randint(20,150),
          np.random.randint(20,120),"Normal"))
 
+    # ---- INVENTORY ----
     for w in warehouses:
         for i,item in enumerate(items):
             cur.execute("INSERT INTO inventory VALUES (?,?,?,?,?,?,?,?,?)",
@@ -78,10 +82,12 @@ def seed_demo_data():
              np.random.randint(200,600),np.random.randint(50,200),
              150,150,np.random.randint(10,40)))
 
+    # ---- SUPPLIERS ----
     for s in suppliers_list:
         for item in items:
             cur.execute("INSERT INTO suppliers VALUES (?,?,?,?,?,?,?)",
-            (s,item,"India",np.random.randint(2,10),
+            (s,item,"India",
+             np.random.randint(2,10),
              np.random.randint(100,400),
              round(np.random.uniform(0.7,0.95),2),
              np.random.randint(10,40)))
@@ -89,25 +95,25 @@ def seed_demo_data():
     conn.commit()
 
 seed_demo_data()
-
-# ==========================================================
-# LOAD DATA
-# ==========================================================
 def get_table(name):
-    try: return pd.read_sql(f"SELECT * FROM {name}",get_conn())
-    except: return pd.DataFrame()
+    try:
+        return pd.read_sql(f"SELECT * FROM {name}",get_conn())
+    except:
+        return pd.DataFrame()
 
 orders=get_table("orders")
 inventory=get_table("inventory")
 suppliers=get_table("suppliers")
 
 # ==========================================================
-# REAL-TIME BALANCING ENGINE
+# REAL-TIME SUPPLY DEMAND BALANCING ENGINE
 # ==========================================================
 def balancing_engine():
+
     df=inventory.copy()
     demand=orders.groupby("item")["qty"].sum().reset_index()
     df=df.merge(demand,on="item",how="left").fillna(0)
+
     df["available_stock"]=df["on_hand"]+df["wip"]
     df["projected_stock"]=df["available_stock"]-df["qty"]
 
@@ -123,64 +129,76 @@ def balancing_engine():
     return df,actions
 
 balanced,actions=balancing_engine()
-
 # ==========================================================
-# PERSONAS (CHARACTERS FROM PROBLEM STATEMENT)
+# PERSONAS FROM PROBLEM STATEMENT
 # ==========================================================
 st.sidebar.title("👥 MSME Personas")
+
 persona=st.sidebar.selectbox("Choose Persona",
 ["Owner Rajesh","Planner Kavitha","Warehouse Arun","Supplier ABC Foods"])
 
 if persona=="Owner Rajesh":
-    st.sidebar.info("Wants fewer stockouts & better cash flow")
+    st.sidebar.info("Concern: Cash flow & missed deliveries")
 elif persona=="Planner Kavitha":
-    st.sidebar.info("Needs faster planning & fewer reschedules")
+    st.sidebar.info("Concern: Rescheduling & firefighting")
 elif persona=="Warehouse Arun":
-    st.sidebar.info("Needs to avoid overstock & space issues")
+    st.sidebar.info("Concern: Overstock & storage space")
 elif persona=="Supplier ABC Foods":
-    st.sidebar.info("Needs predictable purchase orders")
-
+    st.sidebar.info("Concern: Sudden urgent purchase orders")
 # ==========================================================
-# MENU
+# SAFE CHART BUILDER (no plotly crashes ever)
 # ==========================================================
+def safe_bar_chart(df,x,y,color=None,title="Chart"):
+    try:
+        if x not in df.columns: df[x]="Unknown"
+        if y not in df.columns: df[y]=0
+        if color and color not in df.columns: df[color]="General"
+        fig=px.bar(df,x=x,y=y,color=color,title=title)
+        st.plotly_chart(fig,use_container_width=True)
+    except:
+        st.warning("Not enough data to display this chart yet.")
 menu=st.sidebar.selectbox("Navigation",
 ["Control Tower","Analytics","AI Assistant","Upload Data","Manual Entry"])
 
-# ==========================================================
-# CONTROL TOWER
-# ==========================================================
 if menu=="Control Tower":
     st.title("🏭 SupplySense Control Tower")
 
-    col1,col2,col3=st.columns(3)
-    col1.metric("Orders",len(orders))
-    col2.metric("Inventory Items",len(inventory))
-    col3.metric("Alerts",len(actions))
+    c1,c2,c3=st.columns(3)
+    c1.metric("Orders",len(orders))
+    c2.metric("Inventory Items",len(inventory))
+    c3.metric("Alerts",len(actions))
 
-    st.subheader("⚠️ AI Recommendations")
-    for a in actions: st.warning(a)
+    st.subheader("⚠️ Recommended Actions")
+    for a in actions:
+        st.warning(a)
 
-    st.subheader("Projected Stock")
+    st.subheader("Projected Stock Levels")
     st.dataframe(balanced)
-
-# ==========================================================
-# ANALYTICS
-# ==========================================================
 elif menu=="Analytics":
     st.title("📊 Demand & Inventory Insights")
 
-    st.plotly_chart(px.bar(inventory,x="warehouse",y="on_hand",color="category"))
-    st.plotly_chart(px.pie(orders,names="category",values="qty"))
-    st.plotly_chart(px.bar(orders.groupby("customer")["qty"].sum().reset_index(),
-                           x="customer",y="qty",title="Top Customers"))
-    suppliers["risk"]=suppliers["lead_time"]*(1-suppliers["reliability"])
-    st.plotly_chart(px.bar(suppliers,x="supplier",y="risk",title="Supplier Risk"))
+    safe_bar_chart(inventory,"warehouse","on_hand","category","Inventory by Warehouse")
 
-# ==========================================================
-# AI ASSISTANT (SAFE)
-# ==========================================================
+    try:
+        fig=px.pie(orders,names="category",values="qty",title="Demand by Category")
+        st.plotly_chart(fig,use_container_width=True)
+    except:
+        st.warning("Upload more order data for category insights.")
+
+    try:
+        cust=orders.groupby("customer")["qty"].sum().reset_index()
+        safe_bar_chart(cust,"customer","qty",None,"Top Customers")
+    except:
+        pass
+
+    try:
+        suppliers["risk"]=suppliers["lead_time"]*(1-suppliers["reliability"])
+        safe_bar_chart(suppliers,"supplier","risk",None,"Supplier Risk")
+    except:
+        pass
 elif menu=="AI Assistant":
     st.title("🤖 Ask SupplySense")
+
     q=st.text_input("Ask planning question")
 
     if q:
@@ -192,12 +210,8 @@ elif menu=="AI Assistant":
             )
             st.success(res.choices[0].message.content)
         else:
-            st.info("AI offline → Showing rule-based insight")
-            st.write("Review stockouts & supplier lead times.")
-
-# ==========================================================
-# UPLOAD
-# ==========================================================
+            st.info("AI offline → Showing rule-based insights")
+            st.write("Review low stock alerts & supplier lead times.")
 elif menu=="Upload Data":
     table=st.selectbox("Table",["orders","inventory","suppliers"])
     file=st.file_uploader("Upload CSV/Excel",type=["csv","xlsx"])
@@ -206,11 +220,8 @@ elif menu=="Upload Data":
         df.to_sql(table,get_conn(),if_exists="replace",index=False)
         st.success("Uploaded!")
 
-# ==========================================================
-# MANUAL ENTRY
-# ==========================================================
 elif menu=="Manual Entry":
-    st.title("➕ Add Order")
+    st.title("➕ Add New Order")
     item=st.text_input("Item")
     qty=st.number_input("Quantity")
     if st.button("Add Order"):
