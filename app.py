@@ -249,12 +249,33 @@ elif menu=="AI Assistant":
             st.write("• Monitor demand spikes weekly")
 
 elif menu=="Upload Data":
-    table=st.selectbox("Table",["orders","inventory","suppliers"])
-    file=st.file_uploader("Upload CSV/Excel",type=["csv","xlsx"])
+    st.title("📤 Upload Excel / CSV")
+
+    table = st.selectbox("Select table", ["orders","inventory","suppliers"])
+    file = st.file_uploader("Upload dataset")
+
     if file:
-        df=pd.read_excel(file) if file.name.endswith(".xlsx") else pd.read_csv(file)
-        df.to_sql(table,get_conn(),if_exists="replace",index=False)
-        st.success("Uploaded!")
+        # read file
+        df = pd.read_excel(file) if file.name.endswith(".xlsx") else pd.read_csv(file)
+
+        # ==================================================
+        # 🔥 AUTO COLUMN CLEANER (FINAL BUG FIX)
+        # ==================================================
+        df.columns = (
+            df.columns
+            .str.strip()          # remove spaces
+            .str.lower()          # lowercase
+            .str.replace(" ", "_")# spaces → underscore
+            .str.replace("-", "_")
+        )
+
+        st.write("Detected columns:", df.columns.tolist())
+
+        conn = get_conn()
+        df.to_sql(table, conn, if_exists="replace", index=False)
+
+        st.success("File uploaded and standardized successfully!")
+
 
 elif menu=="Manual Entry":
     st.title("➕ Add New Order")
