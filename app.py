@@ -1,5 +1,5 @@
 # ======================================================
-# SUPPLYSENSE – FINAL CLOUD VERSION
+# SUPPLYSENSE – FINAL STABLE BUILD
 # ======================================================
 
 import streamlit as st
@@ -15,72 +15,60 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph
 from reportlab.lib.styles import getSampleStyleSheet
 from twilio.rest import Client
 
-# ---------- SAFE VOICE IMPORT ----------
+# ---- OPTIONAL VOICE (SAFE FOR CLOUD) ----
 try:
     import speech_recognition as sr
-    VOICE_ENABLED = True
+    VOICE_ENABLED=True
 except:
-    VOICE_ENABLED = False
+    VOICE_ENABLED=False
 
 st.set_page_config(layout="wide")
 
-# ---------- STRIPE LINKS ----------
+# ---- STRIPE LINKS ----
 PRO_LINK="https://buy.stripe.com/YOUR_PRO_LINK"
 ENT_LINK="https://buy.stripe.com/YOUR_ENTERPRISE_LINK"
 
-# ---------- TWILIO (optional) ----------
+# ---- TWILIO (OPTIONAL) ----
 TWILIO_SID="PUT_SID"
 TWILIO_TOKEN="PUT_TOKEN"
 TWILIO_WHATSAPP="whatsapp:+14155238886"
 USER_WHATSAPP="whatsapp:+91XXXXXXXXXX"
 
-# ---------- EMAIL (optional) ----------
+# ---- EMAIL (OPTIONAL) ----
 EMAIL_SENDER="yourgmail@gmail.com"
 EMAIL_PASSWORD="your_app_password"
 EMAIL_RECEIVER="yourgmail@gmail.com"
 
-# ---------- DATABASE ----------
-DB_PATH="/tmp/msme.db"
-conn=sqlite3.connect(DB_PATH,check_same_thread=False)
+# ---- DATABASE ----
+conn=sqlite3.connect("/tmp/msme.db",check_same_thread=False)
 c=conn.cursor()
 
 def safe_commit():
     try: conn.commit()
     except: pass
 
-# ---------- DB INIT ----------
-c.execute("""CREATE TABLE IF NOT EXISTS users
-(username TEXT,password TEXT,role TEXT,plan TEXT)""")
-
-c.execute("""CREATE TABLE IF NOT EXISTS orders
-(date TEXT,item TEXT,qty INT)""")
-
-c.execute("""CREATE TABLE IF NOT EXISTS inventory
-(item TEXT,warehouse TEXT,on_hand INT,wip INT,safety INT)""")
-
-c.execute("""CREATE TABLE IF NOT EXISTS suppliers
-(item TEXT,lead INT,moq INT)""")
-
+# ---- CREATE TABLES ----
+c.execute("CREATE TABLE IF NOT EXISTS users(username TEXT,password TEXT,role TEXT,plan TEXT)")
+c.execute("CREATE TABLE IF NOT EXISTS orders(date TEXT,item TEXT,qty INT)")
+c.execute("CREATE TABLE IF NOT EXISTS inventory(item TEXT,warehouse TEXT,on_hand INT,wip INT,safety INT)")
+c.execute("CREATE TABLE IF NOT EXISTS suppliers(item TEXT,lead INT,moq INT)")
 safe_commit()
 
-# ---------- DEFAULT USERS ----------
+# ---- PASSWORD HASH ----
 def hash_password(p): return hashlib.sha256(p.encode()).hexdigest()
 def verify_password(p,h): return hash_password(p)==h
 
+# ---- DEFAULT USERS ----
 if c.execute("SELECT COUNT(*) FROM users").fetchone()[0]==0:
-    c.execute("INSERT INTO users VALUES (?,?,?,?)",
-              ("admin",hash_password("admin123"),"Admin","Enterprise"))
-    c.execute("INSERT INTO users VALUES (?,?,?,?)",
-              ("planner",hash_password("plan123"),"Planner","Pro"))
-    c.execute("INSERT INTO users VALUES (?,?,?,?)",
-              ("viewer",hash_password("view123"),"Viewer","Free"))
+    c.execute("INSERT INTO users VALUES (?,?,?,?)",("admin",hash_password("admin123"),"Admin","Enterprise"))
+    c.execute("INSERT INTO users VALUES (?,?,?,?)",("planner",hash_password("plan123"),"Planner","Pro"))
+    c.execute("INSERT INTO users VALUES (?,?,?,?)",("viewer",hash_password("view123"),"Viewer","Free"))
     safe_commit()
 
-# ---------- ALERT FUNCTIONS ----------
+# ---- ALERTS ----
 def send_whatsapp(msg):
     try:
-        Client(TWILIO_SID,TWILIO_TOKEN).messages.create(
-            body=msg,from_=TWILIO_WHATSAPP,to=USER_WHATSAPP)
+        Client(TWILIO_SID,TWILIO_TOKEN).messages.create(body=msg,from_=TWILIO_WHATSAPP,to=USER_WHATSAPP)
     except: pass
 
 def send_email(msg):
@@ -96,7 +84,7 @@ def send_email(msg):
         smtp.quit()
     except: pass
 
-# ---------- PDF REPORT ----------
+# ---- PDF REPORT ----
 def generate_pdf(actions):
     doc=SimpleDocTemplate("/tmp/report.pdf")
     styles=getSampleStyleSheet()
@@ -105,49 +93,44 @@ def generate_pdf(actions):
         story.append(Paragraph(a,styles["Normal"]))
     doc.build(story)
 
-# ---------- VOICE ----------
+# ---- VOICE ----
 def voice_query():
-    if not VOICE_ENABLED:
-        return "Voice disabled on cloud"
+    if not VOICE_ENABLED: return "Voice disabled on cloud"
     r=sr.Recognizer()
-    with sr.Microphone() as source:
-        audio=r.listen(source)
+    with sr.Microphone() as source: audio=r.listen(source)
     try: return r.recognize_google(audio)
     except: return "Could not understand"
 
-# ---------- LOGIN ----------
-if "logged" not in st.session_state:
-    st.session_state.logged=False
+# ---- AUTH ----
+if "logged" not in st.session_state: st.session_state.logged=False
 
 def signup():
     st.subheader("Create Account")
-    u=st.text_input("Username")
-    p=st.text_input("Password",type="password")
-    role=st.selectbox("Role",["Viewer","Planner"])
-    plan=st.selectbox("Plan",["Free","Pro","Enterprise"])
-    if st.button("Sign Up"):
-        c.execute("INSERT INTO users VALUES (?,?,?,?)",
-                  (u,hash_password(p),role,plan))
+    new_user=st.text_input("Username",key="signup_user")
+    new_pass=st.text_input("Password",type="password",key="signup_pass")
+    role=st.selectbox("Role",["Viewer","Planner"],key="signup_role")
+    plan=st.selectbox("Plan",["Free","Pro","Enterprise"],key="signup_plan")
+    if st.button("Sign Up",key="signup_btn"):
+        c.execute("INSERT INTO users VALUES (?,?,?,?)",(new_user,hash_password(new_pass),role,plan))
         safe_commit()
-        st.success("Account created")
+        st.success("Account created! Please login.")
 
 def login():
     tab1,tab2=st.tabs(["Login","Sign Up"])
     with tab1:
-        u=st.text_input("Username")
-        p=st.text_input("Password",type="password")
-        if st.button("Login"):
+        u=st.text_input("Username",key="login_user")
+        p=st.text_input("Password",type="password",key="login_pass")
+        if st.button("Login",key="login_btn"):
             res=c.execute("SELECT password,role,plan FROM users WHERE username=?",(u,)).fetchone()
             if res and verify_password(p,res[0]):
                 st.session_state.logged=True
                 st.session_state.role=res[1]
                 st.session_state.plan=res[2]
                 st.rerun()
-            else:
-                st.error("Invalid login")
+            else: st.error("Invalid credentials")
     with tab2: signup()
 
-# ---------- LANDING PAGE ----------
+# ---- LANDING PAGE ----
 if not st.session_state.logged:
     st.title("🏭 SupplySense")
     st.subheader("AI Control Tower for MSME Supply Chains")
@@ -157,20 +140,16 @@ if not st.session_state.logged:
     login()
     st.stop()
 
-# ---------- LOAD DATA ----------
-def get_table(name):
-    return pd.read_sql(f"SELECT * FROM {name}",conn)
-
+# ---- LOAD DATA ----
+def get_table(name): return pd.read_sql(f"SELECT * FROM {name}",conn)
 orders=get_table("orders")
 inventory=get_table("inventory")
-suppliers=get_table("suppliers")
 
-# ---------- AI ENGINE ----------
+# ---- AI ENGINE ----
 def forecast(df):
     fc={}
     for item in df["item"].unique():
-        avg=df[df["item"]==item]["qty"].mean()
-        fc[item]=avg*14
+        fc[item]=df[df["item"]==item]["qty"].mean()*14
     return fc
 
 def simulate(inv,fc):
@@ -179,8 +158,7 @@ def simulate(inv,fc):
         stock=r["on_hand"]+r["wip"]
         demand=fc.get(r["item"],0)
         rows.append([r["warehouse"],r["item"],stock,demand,stock-demand,r["safety"]])
-    return pd.DataFrame(rows,
-        columns=["Warehouse","Item","StartStock","Demand","EndStock","Safety"])
+    return pd.DataFrame(rows,columns=["Warehouse","Item","StartStock","Demand","EndStock","Safety"])
 
 def actions(inv):
     acts=[]
@@ -195,46 +173,39 @@ def actions(inv):
             acts.append(f"📉 Overstock {r['Item']} → Discount")
     return acts
 
-# ---------- SIDEBAR ----------
-st.sidebar.success(f"Plan: {st.session_state.plan}")
-menu=st.sidebar.selectbox("Menu",
-["Dashboard","Analytics","Warehouse Map","AI Assistant","Data Entry"])
+# ---- MENU ----
+menu=st.sidebar.selectbox("Menu",["Dashboard","Analytics","Warehouse Map","AI Assistant","Data Entry"])
 
-# ---------- DASHBOARD ----------
-if menu=="Dashboard":
-    if len(orders)>0 and len(inventory)>0:
-        fc=forecast(orders)
-        inv=simulate(inventory,fc)
-        recs=actions(inv)
+# ---- DASHBOARD ----
+if menu=="Dashboard" and len(orders)>0 and len(inventory)>0:
+    fc=forecast(orders)
+    inv=simulate(inventory,fc)
+    recs=actions(inv)
+    st.dataframe(inv)
+    st.subheader("AI Recommendations")
+    for r in recs: st.write(r)
+    generate_pdf(recs)
+    with open("/tmp/report.pdf","rb") as f:
+        st.download_button("Download Report",f,"report.pdf")
 
-        st.dataframe(inv)
-        st.subheader("AI Recommendations")
-        for r in recs: st.write(r)
-
-        generate_pdf(recs)
-        with open("/tmp/report.pdf","rb") as f:
-            st.download_button("Download Report",f,"report.pdf")
-
-# ---------- ANALYTICS ----------
-elif menu=="Analytics":
+# ---- ANALYTICS ----
+elif menu=="Analytics" and len(orders)>0:
     orders["date"]=pd.to_datetime(orders["date"])
     daily=orders.groupby("date")["qty"].sum().reset_index()
     st.plotly_chart(px.line(daily,x="date",y="qty"))
 
-# ---------- MAP ----------
+# ---- MAP ----
 elif menu=="Warehouse Map":
-    st.map(pd.DataFrame({"lat":[13.08,12.97,19.07],"lon":[80.27,77.59,72.87]})
-           .rename(columns={"lat":"latitude","lon":"longitude"}))
+    st.map(pd.DataFrame({"lat":[13.08,12.97,19.07],"lon":[80.27,77.59,72.87]}).rename(columns={"lat":"latitude","lon":"longitude"}))
 
-# ---------- AI ASSISTANT ----------
+# ---- AI ASSISTANT ----
 elif menu=="AI Assistant":
     q=st.text_input("Ask SupplySense")
     if VOICE_ENABLED and st.button("Voice"):
-        q=voice_query()
-        st.write(q)
+        q=voice_query(); st.write(q)
     if q: st.success("Check dashboard insights!")
 
-# ---------- DATA UPLOAD ----------
+# ---- DATA UPLOAD ----
 elif menu=="Data Entry":
     file=st.file_uploader("Upload CSV/Excel",type=["csv","xlsx"])
     if file:
