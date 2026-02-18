@@ -459,13 +459,22 @@ elif menu=="Upload Data":
 
     if file:
         df = pd.read_excel(file) if file.name.endswith(".xlsx") else pd.read_csv(file)
-        df.columns=df.columns.str.lower().str.replace(" ","_")
-        # Ensure capacity columns exist
+        df.columns = df.columns.str.lower().str.replace(" ","_")
+
+# 🔥 Capacity column safety (FIXED)
     if table == "capacity":
-        required_cols = ["warehouse","machine","daily_capacity","shift_hours","utilization"]
+        required_cols = [
+            "warehouse",
+            "machine",
+            "daily_capacity",
+            "shift_hours",
+            "utilization"
+        ]
+
     for col in required_cols:
         if col not in df.columns:
             df[col] = 0
+
 
         df.to_sql(f"{table}_{persona_key}",get_conn(),if_exists="replace",index=False)
         st.success("Data uploaded")
