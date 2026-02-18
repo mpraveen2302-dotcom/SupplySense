@@ -231,21 +231,39 @@ def calc_kpis():
 # ==========================================================
 # DEMAND FORECAST ENGINE
 # ==========================================================
+# ==========================================================
+# 📈 DEMAND FORECASTING MODULE (SAFE VERSION)
+# ==========================================================
 def forecast_demand():
 
-    if len(orders) < 10:
+    # If no data → skip forecasting
+    if len(orders) == 0:
         return pd.DataFrame()
 
     df = orders.copy()
-    df["date"] = pd.to_datetime(df["date"], errors="coerce")
 
+    # Auto-create missing columns (prevents KeyError)
+    if "date" not in df.columns:
+        return pd.DataFrame()
+
+    if "qty" not in df.columns:
+        return pd.DataFrame()
+
+    # Convert date safely
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    df = df.dropna(subset=["date"])
+
+    if len(df) < 7:
+        return pd.DataFrame()
+
+    # Daily demand aggregation
     forecast = df.groupby("date")["qty"].sum().reset_index()
+
+    # Simple rolling forecast (demo AI)
     forecast["forecast"] = forecast["qty"].rolling(7).mean()
 
     return forecast
 
-
-forecast_df = forecast_demand()
 # ==========================================================
 # SAFE CHART BUILDER
 # ==========================================================
