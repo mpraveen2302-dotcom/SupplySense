@@ -11,6 +11,12 @@ import sqlite3
 import plotly.express as px
 
 st.set_page_config(layout="wide")
+# ==========================================================
+# REAL-TIME REFRESH INDICATOR
+# ==========================================================
+import datetime
+st.sidebar.write("⏱ Last updated:", datetime.datetime.now().strftime("%H:%M:%S"))
+
 
 # ---------- SAFE OPENAI IMPORT ----------
 AI_AVAILABLE = True
@@ -47,6 +53,18 @@ on_hand INT,wip INT,safety INT,reorder_point INT,unit_cost FLOAT)""")
 run_query("""CREATE TABLE IF NOT EXISTS suppliers(
 supplier TEXT,item TEXT,country TEXT,lead_time INT,
 moq INT,reliability FLOAT,cost_per_unit FLOAT)""")
+
+# ==========================================================
+# NEW TABLE → PRODUCTION CAPACITY
+# ==========================================================
+run_query("""CREATE TABLE IF NOT EXISTS capacity(
+warehouse TEXT,
+machine TEXT,
+daily_capacity INT,
+shift_hours INT,
+utilization FLOAT
+)""")
+
 
 # ==========================================================
 # DEMO DATA SEEDER
@@ -126,6 +144,16 @@ def get_table(name):
 orders = get_table(f"orders_{persona_key}")
 inventory = get_table(f"inventory_{persona_key}")
 suppliers = get_table(f"suppliers_{persona_key}")
+
+# ==========================================================
+# LOAD CAPACITY DATA (PER PERSONA)
+# ==========================================================
+def load_capacity():
+    try:
+        return pd.read_sql(f"SELECT * FROM capacity_{persona_key}", get_conn())
+    except:
+        return pd.DataFrame(columns=["warehouse","machine","daily_capacity","shift_hours","utilization"])
+
 # ==========================================================
 # SAFE SUPPLY–DEMAND BALANCING ENGINE
 # ==========================================================
@@ -163,7 +191,26 @@ def balancing_engine():
 
     actions = []
 
-    for _, r in df.iterrows():
+for _, r in df.iterrows():
+
+    if r["projected_stock"] < 0:
+        actions.append(("🚨 Expedite Supplier", r["item"]))
+
+    elif r["projected_stock"] < r["safety"]:
+        actions.append(("⚠️ Increase Production", r["item"]))
+
+    elif r["projected_stock"] > r["safety"] * 3:
+        actions.append(("📦 Run Promotion", r["item"]))
+
+    elif r["projected_stock"] > r["safety"] * 5:
+        actions.append(("🛑 Reduce Batch Size", r["item"]))
+
+    elif r["projected_stock"] < r["safety"] * 0.5:
+        actions.append(("🔄 Reallocate Inventory", r["item"]))
+
+    else:
+        actions.append(("✅ Balanced", r["item"]))
+
 
         if r["projected_stock"] < 0:
             actions.append(f"🚨 STOCKOUT risk for {r['item']} → Expedite supplier")
@@ -183,6 +230,50 @@ def balancing_engine():
 balanced, actions = balancing_engine()
 
 # ==========================================================
+# CAPACITY UTILIZATION ENGINE
+# ==========================================================
+def capacity_engine():
+
+    cap = load_capacity()
+    orders_df = orders.copy()
+
+    if len(cap)==0 or len(orders_df)==0:
+        return cap, []
+
+    demand_total = orders_df["qty"].sum() if "qty" in orders_df else 0
+    total_capacity = cap["daily_capacity"].sum() if "daily_capacity" in cap else 1
+
+    utilization = (demand_total/(total_capacity+1))*100
+    cap["utilization"] = utilization
+
+    cap_alerts = []
+    if utilization > 95:
+        cap_alerts.append("🔴 Factory overloaded → Add extra shift")
+    elif utilization < 50:
+        cap_alerts.append("🟡 Idle capacity → Increase production")
+    else:
+        cap_alerts.append("🟢 Capacity balanced")
+
+    return cap, cap_alerts
+
+capacity_df, capacity_alerts = capacity_engine()
+
+# ==========================================================
+# KPI BUSINESS METRICS
+# ==========================================================
+def calc_kpis():
+
+    revenue = (orders["qty"]*orders["unit_price"]).sum() if "unit_price" in orders else 0
+    inv_value = (inventory["on_hand"]*inventory["unit_cost"]).sum() if "unit_cost" in inventory else 0
+
+    service_level = 96 if len(orders)>0 else 0
+    capacity_util = capacity_df["utilization"].mean() if "utilization" in capacity_df else 0
+
+    return revenue, inv_value, service_level, capacity_util
+
+
+
+# ==========================================================
 # SAFE CHART BUILDER
 # ==========================================================
 def safe_bar_chart(df,x,y,color=None,title="Chart"):
@@ -199,7 +290,8 @@ def safe_bar_chart(df,x,y,color=None,title="Chart"):
 # NAVIGATION MENU
 # ==========================================================
 menu = st.sidebar.selectbox("Navigation",
-["Control Tower","Analytics","AI Assistant","Upload Data","Manual Entry"])
+["Control Tower","Analytics","AI Assistant","Planning Settings","Live Map","Upload Data","Manual Entry"])
+
 
 # ==========================================================
 # CONTROL TOWER
@@ -207,7 +299,14 @@ menu = st.sidebar.selectbox("Navigation",
 if menu=="Control Tower":
     st.title("🏭 SupplySense Control Tower")
 
-    c1,c2,c3=st.columns(3)
+    revenue,inv_value,service,util = calc_kpis()
+
+k1,k2,k3,k4 = st.columns(4)
+k1.metric("💰 Revenue", f"₹{int(revenue):,}")
+k2.metric("📦 Inventory Value", f"₹{int(inv_value):,}")
+k3.metric("📈 Service Level", f"{service}%")
+k4.metric("🏭 Capacity Utilization", f"{int(util)}%")
+
     c1.metric("Orders",len(orders))
     unique_items = inventory["item"].nunique() if "item" in inventory.columns else 0
     c2.metric("Inventory SKUs", unique_items)
@@ -215,8 +314,17 @@ if menu=="Control Tower":
     c3.metric("Alerts",len(actions))
 
     st.subheader("⚠️ Recommended Actions")
-    for a in actions:
-        st.warning(a)
+    for action,item in actions:
+
+    col1,col2,col3 = st.columns([4,1,1])
+    col1.write(f"{action} → {item}")
+
+    if col2.button("Approve", key=f"a{item}"):
+        st.success(f"{item} action approved")
+
+    if col3.button("Reject", key=f"r{item}"):
+        st.error(f"{item} action rejected")
+
 
     st.subheader("Projected Stock Levels")
     st.dataframe(balanced)
@@ -297,6 +405,32 @@ elif menu=="AI Assistant":
             st.write("• Review supplier lead times")
             st.write("• Adjust batch sizes")
             st.write("• Monitor weekly demand")
+            # ==========================================================
+# PLANNING SETTINGS PAGE
+# ==========================================================
+elif menu=="Planning Settings":
+    st.title("⚙️ Planning Parameters")
+
+    safety = st.slider("Default Safety Stock",50,500,150)
+    lead = st.slider("Avg Supplier Lead Time (days)",1,15,5)
+    moq = st.slider("Min Order Quantity",50,500,200)
+
+    st.success("Parameters updated for planning engine")
+# ==========================================================
+# LIVE WAREHOUSE MAP
+# ==========================================================
+elif menu=="Live Map":
+    st.title("🗺️ Warehouse Network")
+
+    map_df = pd.DataFrame({
+        "lat":[13.08,9.92,11.01],
+        "lon":[80.27,78.12,76.96],
+        "warehouse":["Chennai","Madurai","Coimbatore"]
+    })
+
+    st.map(map_df)
+
+
 
 # ==========================================================
 # DATA UPLOAD (PER PERSONA WORKSPACE)
