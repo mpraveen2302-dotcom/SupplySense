@@ -113,16 +113,29 @@ def balancing_engine():
     df = inventory.copy()
     ord_df = orders.copy()
 
-    # auto create missing columns
-    for col in ["item","on_hand","wip","safety"]:
-        if col not in df.columns:
-            df[col] = 0
+# --------------------------------------------------
+# AUTO CREATE ALL REQUIRED COLUMNS (CRITICAL FIX)
+# --------------------------------------------------
+inv_required = ["item","on_hand","wip","safety"]
+ord_required = ["item","qty"]
 
-    if "qty" not in ord_df.columns:
-        ord_df["qty"] = 0
+for col in inv_required:
+    if col not in df.columns:
+        df[col] = 0
 
-    # demand aggregation
+for col in ord_required:
+    if col not in ord_df.columns:
+        ord_df[col] = 0
+
+# --------------------------------------------------
+# DEMAND AGGREGATION (SAFE)
+# --------------------------------------------------
+if len(ord_df) == 0:
+    demand = pd.DataFrame({"item":df["item"],"forecast_demand":0})
+else:
     demand = ord_df.groupby("item")["qty"].sum().reset_index()
+    demand.rename(columns={"qty":"forecast_demand"}, inplace=True)
+
     demand.rename(columns={"qty":"forecast_demand"}, inplace=True)
 
     df = df.merge(demand, on="item", how="left")
