@@ -100,34 +100,41 @@ def load_capacity():
     except:
         return pd.DataFrame(columns=["warehouse","machine","daily_capacity","shift_hours","utilization"])
 # ==========================================================
-# SUPPLY–DEMAND BALANCING ENGINE (FINAL FIXED)
+# 🧠 REAL-TIME SUPPLY–DEMAND BALANCING ENGINE (FIXED)
 # ==========================================================
 def balancing_engine():
 
     df = inventory.copy()
     ord_df = orders.copy()
 
-    # ---- AUTO CREATE REQUIRED COLUMNS ----
-    for col in ["item","on_hand","wip","safety"]:
-        if col not in df.columns:
-            df[col] = 0
+    # Ensure required columns exist
+    if "item" not in df.columns:
+        df["item"] = ""
+    if "on_hand" not in df.columns:
+        df["on_hand"] = 0
+    if "wip" not in df.columns:
+        df["wip"] = 0
+    if "safety" not in df.columns:
+        df["safety"] = 100
 
-    for col in ["item","qty"]:
-        if col not in ord_df.columns:
-            ord_df[col] = 0
+    if "item" not in ord_df.columns:
+        ord_df["item"] = ""
+    if "qty" not in ord_df.columns:
+        ord_df["qty"] = 0
 
-    # ---- DEMAND AGGREGATION ----
+    # Demand aggregation
     demand = ord_df.groupby("item")["qty"].sum().reset_index()
-    demand.rename(columns={"qty":"forecast_demand"}, inplace=True)
+    demand.rename(columns={"qty": "forecast_demand"}, inplace=True)
 
+    # Merge demand with inventory
     df = df.merge(demand, on="item", how="left")
     df["forecast_demand"] = df["forecast_demand"].fillna(0)
 
-    # ---- STOCK PROJECTION ----
+    # Stock projection
     df["available_stock"] = df["on_hand"] + df["wip"]
     df["projected_stock"] = df["available_stock"] - df["forecast_demand"]
 
-    # ---- ACTION ENGINE ----
+    # Recommendation engine
     actions = []
 
     for _, r in df.iterrows():
@@ -153,7 +160,9 @@ def balancing_engine():
     return df, actions
 
 
+# RUN ENGINE
 balanced, actions = balancing_engine()
+
 
 
 # ==========================================================
