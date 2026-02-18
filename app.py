@@ -332,25 +332,28 @@ st.dataframe(balanced)
 # ANALYTICS DASHBOARD
 # ==========================================================
 elif menu=="Analytics":
-st.title("📊 Demand & Inventory Insights")
+    st.title("📊 Demand & Inventory Insights")
 
-safe_bar_chart(inventory,"warehouse","on_hand","category","Inventory by Warehouse")
+    safe_bar_chart(inventory,"warehouse","on_hand","category","Inventory by Warehouse")
 
-try:
-    fig=px.pie(orders,names="category",values="qty",title="Demand by Category")
-    st.plotly_chart(fig,use_container_width=True)
-except:
-    st.warning("Upload more order data for category insights.")
-try:
-    cust=orders.groupby("customer")["qty"].sum().reset_index()
-    safe_bar_chart(cust,"customer","qty",None,"Top Customers")
-except:
-    pass
-try:
-    suppliers["risk"]=suppliers["lead_time"]*(1-suppliers["reliability"])
-    safe_bar_chart(suppliers,"supplier","risk",None,"Supplier Risk")
-except:
-     pass
+    try:
+        fig=px.pie(orders,names="category",values="qty",title="Demand by Category")
+        st.plotly_chart(fig,use_container_width=True)
+    except:
+        st.warning("Upload more order data for category insights.")
+
+    try:
+        cust=orders.groupby("customer")["qty"].sum().reset_index()
+        safe_bar_chart(cust,"customer","qty",None,"Top Customers")
+    except:
+        pass
+
+    try:
+        suppliers["risk"]=suppliers["lead_time"]*(1-suppliers["reliability"])
+        safe_bar_chart(suppliers,"supplier","risk",None,"Supplier Risk")
+    except:
+        pass
+
 # ==========================================================
 # AI ASSISTANT (Hybrid Cloud + Offline)
 # ==========================================================
