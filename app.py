@@ -149,20 +149,27 @@ else:
     actions = []
 
     for _, r in df.iterrows():
+
         if r["projected_stock"] < 0:
             actions.append(("🚨 Expedite Supplier", r["item"]))
+
         elif r["projected_stock"] < r["safety"]:
             actions.append(("⚠️ Increase Production", r["item"]))
-        elif r["projected_stock"] > r["safety"] * 3:
-            actions.append(("📦 Run Promotion", r["item"]))
+
         elif r["projected_stock"] > r["safety"] * 5:
             actions.append(("🛑 Reduce Batch Size", r["item"]))
+
+        elif r["projected_stock"] > r["safety"] * 3:
+            actions.append(("📦 Run Promotion", r["item"]))
+
         elif r["projected_stock"] < r["safety"] * 0.5:
             actions.append(("🔄 Reallocate Inventory", r["item"]))
+
         else:
             actions.append(("✅ Balanced", r["item"]))
 
     return df, actions
+
 
 balanced, actions = balancing_engine()
 # ==========================================================
