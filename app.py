@@ -162,7 +162,7 @@ else:
         else:
             actions.append(("✅ Balanced", r["item"]))
 
-        return df, actions
+    return df, actions
 
 balanced, actions = balancing_engine()
 # ==========================================================
