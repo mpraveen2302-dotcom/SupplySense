@@ -93,12 +93,25 @@ def get_table(name):
 orders     = get_table(f"orders_{persona_key}")
 inventory  = get_table(f"inventory_{persona_key}")
 suppliers  = get_table(f"suppliers_{persona_key}")
-
 def load_capacity():
     try:
-        return pd.read_sql(f"SELECT * FROM capacity_{persona_key}",get_conn())
+        return pd.read_sql(
+            f"SELECT * FROM capacity_{persona_key}",
+            get_conn()
+        )
     except:
-        return pd.DataFrame(columns=["warehouse","machine","daily_capacity","shift_hours","utilization"])
+        return pd.DataFrame(
+            columns=[
+                "warehouse",
+                "machine",
+                "daily_capacity",
+                "shift_hours",
+                "utilization"
+            ]
+        )
+
+
+
 # ==========================================================
 # 🧠 REAL-TIME SUPPLY–DEMAND BALANCING ENGINE (FIXED)
 # ==========================================================
