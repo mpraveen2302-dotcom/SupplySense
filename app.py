@@ -56,6 +56,19 @@ warehouse TEXT,machine TEXT,daily_capacity INT,
 shift_hours INT,utilization FLOAT)""")
 
 # ==========================================================
+# NEW TABLE → PLANNING PARAMETERS (PER PERSONA)
+# ==========================================================
+run_query("""
+CREATE TABLE IF NOT EXISTS planning_params(
+persona TEXT,
+safety_stock INT,
+lead_time INT,
+moq INT
+)
+""")
+
+
+# ==========================================================
 # PERSONA SELECTOR
 # ==========================================================
 st.sidebar.title("👥 MSME Personas")
@@ -110,6 +123,22 @@ def load_capacity():
             ]
         )
 
+# ==========================================================
+# LOAD PLANNING PARAMETERS (PER PERSONA)
+# ==========================================================
+def load_params():
+    try:
+        df = pd.read_sql(
+            f"SELECT * FROM planning_params WHERE persona='{persona_key}'",
+            get_conn()
+        )
+        if len(df) > 0:
+            return df.iloc[0]
+    except:
+        pass
+
+    # Default values if nothing saved yet
+    return {"safety_stock":150, "lead_time":5, "moq":200}
 
 
 # ==========================================================
@@ -119,6 +148,9 @@ def balancing_engine():
 
     df = inventory.copy()
     ord_df = orders.copy()
+    params = load_params()
+    DEFAULT_SAFETY = params["safety_stock"]
+
 
     # Ensure required columns exist
     if "item" not in df.columns:
@@ -128,7 +160,7 @@ def balancing_engine():
     if "wip" not in df.columns:
         df["wip"] = 0
     if "safety" not in df.columns:
-        df["safety"] = 100
+        df["safety"] = DEFAULT_SAFETY
 
     if "item" not in ord_df.columns:
         ord_df["item"] = ""
@@ -427,18 +459,63 @@ for action,item in actions:
 # ==========================================================
 st.sidebar.subheader("💳 Subscription")
 plan = st.sidebar.selectbox("Plan",["Free","Pro ₹999/mo","Enterprise ₹2999/mo"])
+# ==========================================================
+# FEATURE ACCESS BASED ON PLAN
+# ==========================================================
+if plan == "Free":
+    allowed_pages = ["Control Tower","Upload Data","Manual Entry"]
+
+elif plan == "Pro ₹999/mo":
+    allowed_pages = [
+        "Control Tower",
+        "Analytics",
+        "AI Assistant",
+        "Upload Data",
+        "Manual Entry"
+    ]
+
+else:  # Enterprise
+    allowed_pages = [
+        "Control Tower",
+        "Analytics",
+        "AI Assistant",
+        "Voice Assistant",
+        "Planning Settings",
+        "Live Map",
+        "Upload Data",
+        "Manual Entry"
+    ]
+
 if st.sidebar.button("Upgrade"):
     st.sidebar.success("Stripe checkout would open here")
 
 # ==========================================================
-# PLANNING SETTINGS
+# PLANNING SETTINGS PAGE (NOW REAL)
 # ==========================================================
 elif menu=="Planning Settings":
+
     st.title("⚙️ Planning Parameters")
-    st.slider("Safety Stock",50,500,150)
-    st.slider("Lead Time",1,15,5)
-    st.slider("Minimum Order Qty",50,500,200)
-    st.success("Parameters updated")
+
+    params = load_params()
+
+    safety = st.slider("Safety Stock",50,500,int(params["safety_stock"]))
+    lead   = st.slider("Lead Time (days)",1,15,int(params["lead_time"]))
+    moq    = st.slider("Minimum Order Quantity",50,500,int(params["moq"]))
+
+    if st.button("💾 Save Parameters"):
+
+        run_query(
+            "DELETE FROM planning_params WHERE persona=?",
+            (persona_key,)
+        )
+
+        run_query(
+            "INSERT INTO planning_params VALUES (?,?,?,?)",
+            (persona_key,safety,lead,moq)
+        )
+
+        st.success("Parameters saved for this persona!")
+
 
 # ==========================================================
 # LIVE MAP
