@@ -306,15 +306,14 @@ if menu=="Control Tower":
     st.divider()
     st.subheader("⚠️ Recommended Actions")
 
-    for action,item in actions:
+    for i,(action,item) in enumerate(actions):
         col1,col2,col3 = st.columns([4,1,1])
         col1.write(f"{action} → {item}")
-
-        if col2.button("Approve", key=f"a{item}"):
+        if col2.button("Approve", key=f"approve_{i}_{item}"):
             st.success(f"{item} action approved")
-
-        if col3.button("Reject", key=f"r{item}"):
+        if col3.button("Reject", key=f"reject_{i}_{item}"):
             st.error(f"{item} action rejected")
+
 
     st.subheader("Projected Stock Levels")
     st.dataframe(balanced)
