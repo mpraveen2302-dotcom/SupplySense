@@ -449,35 +449,48 @@ elif menu=="Live Map":
     st.map(map_df)
 
 # ==========================================================
-# DATA UPLOAD
+# DATA UPLOAD (Excel/CSV)
 # ==========================================================
 elif menu=="Upload Data":
 
     st.title("Upload Dataset")
-    table = st.selectbox("Table",["orders","inventory","suppliers","capacity"])
+
+    table = st.selectbox(
+        "Table",
+        ["orders","inventory","suppliers","capacity"]
+    )
+
     file = st.file_uploader("Upload file")
 
     if file:
+
         df = pd.read_excel(file) if file.name.endswith(".xlsx") else pd.read_csv(file)
+
+        # Standardize columns
         df.columns = df.columns.str.lower().str.replace(" ","_")
 
-# 🔥 Capacity column safety (FIXED)
-    if table == "capacity":
-        required_cols = [
-            "warehouse",
-            "machine",
-            "daily_capacity",
-            "shift_hours",
-            "utilization"
-        ]
+        # Capacity column safety
+        if table == "capacity":
+            required_cols = [
+                "warehouse",
+                "machine",
+                "daily_capacity",
+                "shift_hours",
+                "utilization"
+            ]
+            for col in required_cols:
+                if col not in df.columns:
+                    df[col] = 0
 
-for col in required_cols:
-    if col not in df.columns:
-        df[col] = 0
+        # Save to persona workspace DB
+        df.to_sql(
+            f"{table}_{persona_key}",
+            get_conn(),
+            if_exists="replace",
+            index=False
+        )
 
-
-df.to_sql(f"{table}_{persona_key}",get_conn(),if_exists="replace",index=False)
-st.success("Data uploaded")
+        st.success(f"{table} dataset uploaded successfully")
 
 # ==========================================================
 # MANUAL ENTRY
