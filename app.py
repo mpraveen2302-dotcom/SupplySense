@@ -454,12 +454,19 @@ elif menu=="Live Map":
 elif menu=="Upload Data":
 
     st.title("Upload Dataset")
-    table = st.selectbox("Table",["orders","inventory","suppliers"])
+    table = st.selectbox("Table",["orders","inventory","suppliers","capacity"])
     file = st.file_uploader("Upload file")
 
     if file:
         df = pd.read_excel(file) if file.name.endswith(".xlsx") else pd.read_csv(file)
         df.columns=df.columns.str.lower().str.replace(" ","_")
+        # Ensure capacity columns exist
+    if table == "capacity":
+        required_cols = ["warehouse","machine","daily_capacity","shift_hours","utilization"]
+    for col in required_cols:
+        if col not in df.columns:
+            df[col] = 0
+
         df.to_sql(f"{table}_{persona_key}",get_conn(),if_exists="replace",index=False)
         st.success("Data uploaded")
 
