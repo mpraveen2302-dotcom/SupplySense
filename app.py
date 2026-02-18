@@ -13,14 +13,10 @@ import datetime
 
 st.set_page_config(layout="wide")
 
-# ==========================================================
-# ⏱ REAL-TIME REFRESH INDICATOR
-# ==========================================================
+# ⏱ refresh indicator
 st.sidebar.write("⏱ Last updated:", datetime.datetime.now().strftime("%H:%M:%S"))
 
-# ==========================================================
-# 🤖 SAFE OPENAI IMPORT (optional cloud AI)
-# ==========================================================
+# ---------- SAFE OPENAI IMPORT ----------
 AI_AVAILABLE = True
 try:
     from openai import OpenAI
@@ -29,7 +25,7 @@ except:
     AI_AVAILABLE = False
 
 # ==========================================================
-# 💾 DATABASE CONNECTION (Streamlit Safe SQLite)
+# DATABASE CONNECTION
 # ==========================================================
 @st.cache_resource
 def get_conn():
@@ -41,7 +37,7 @@ def run_query(q,p=()):
     conn.commit()
 
 # ==========================================================
-# 🗄 CREATE BASE TABLES (for first run)
+# CREATE BASE TABLES
 # ==========================================================
 run_query("""CREATE TABLE IF NOT EXISTS orders(
 order_id TEXT,date TEXT,customer TEXT,city TEXT,channel TEXT,
@@ -60,7 +56,7 @@ warehouse TEXT,machine TEXT,daily_capacity INT,
 shift_hours INT,utilization FLOAT)""")
 
 # ==========================================================
-# 👥 PERSONA WORKSPACES (MULTI-TENANT)
+# PERSONA SELECTOR
 # ==========================================================
 st.sidebar.title("👥 MSME Personas")
 
@@ -76,18 +72,17 @@ persona_key = {
     "Supplier ABC Foods":"supplier"
 }[persona]
 
-# Persona description (for judges demo storytelling)
 if persona=="Owner Rajesh":
     st.sidebar.info("Concern: Cash flow & missed deliveries")
 elif persona=="Planner Kavitha":
     st.sidebar.info("Concern: Rescheduling & firefighting")
 elif persona=="Warehouse Arun":
     st.sidebar.info("Concern: Overstock & storage space")
-elif persona=="Supplier ABC Foods":
+else:
     st.sidebar.info("Concern: Sudden urgent purchase orders")
 
 # ==========================================================
-# 📥 TABLE LOADER
+# TABLE LOADER
 # ==========================================================
 def get_table(name):
     try:
@@ -104,57 +99,35 @@ def load_capacity():
         return pd.read_sql(f"SELECT * FROM capacity_{persona_key}",get_conn())
     except:
         return pd.DataFrame(columns=["warehouse","machine","daily_capacity","shift_hours","utilization"])
-
 # ==========================================================
-# 🧠 REAL-TIME SUPPLY-DEMAND BALANCING ENGINE
+# SUPPLY–DEMAND BALANCING ENGINE (FINAL FIXED)
 # ==========================================================
 def balancing_engine():
 
     df = inventory.copy()
     ord_df = orders.copy()
 
-# --------------------------------------------------
-# AUTO CREATE ALL REQUIRED COLUMNS (CRITICAL FIX)
-# --------------------------------------------------
-inv_required = ["item","on_hand","wip","safety"]
-ord_required = ["item","qty"]
+    # ---- AUTO CREATE REQUIRED COLUMNS ----
+    for col in ["item","on_hand","wip","safety"]:
+        if col not in df.columns:
+            df[col] = 0
 
-for col in inv_required:
-    if col not in df.columns:
-        df[col] = 0
+    for col in ["item","qty"]:
+        if col not in ord_df.columns:
+            ord_df[col] = 0
 
-for col in ord_required:
-    if col not in ord_df.columns:
-        ord_df[col] = 0
-
-def balancing_engine():
-
-    df = inventory.copy()
-    ord_df = orders.copy()
-
-    if "item" not in df.columns:
-        df["item"] = ""
-    if "on_hand" not in df.columns:
-        df["on_hand"] = 0
-    if "wip" not in df.columns:
-        df["wip"] = 0
-    if "safety" not in df.columns:
-        df["safety"] = 100
-
-    if "item" not in ord_df.columns:
-        ord_df["item"] = ""
-    if "qty" not in ord_df.columns:
-        ord_df["qty"] = 0
-
+    # ---- DEMAND AGGREGATION ----
     demand = ord_df.groupby("item")["qty"].sum().reset_index()
-    demand.rename(columns={"qty": "forecast_demand"}, inplace=True)
+    demand.rename(columns={"qty":"forecast_demand"}, inplace=True)
 
     df = df.merge(demand, on="item", how="left")
     df["forecast_demand"] = df["forecast_demand"].fillna(0)
 
+    # ---- STOCK PROJECTION ----
     df["available_stock"] = df["on_hand"] + df["wip"]
     df["projected_stock"] = df["available_stock"] - df["forecast_demand"]
 
+    # ---- ACTION ENGINE ----
     actions = []
 
     for _, r in df.iterrows():
@@ -179,8 +152,12 @@ def balancing_engine():
 
     return df, actions
 
+
+balanced, actions = balancing_engine()
+
+
 # ==========================================================
-# 🏭 CAPACITY UTILIZATION ENGINE
+# CAPACITY UTILIZATION ENGINE
 # ==========================================================
 def capacity_engine():
 
@@ -189,8 +166,8 @@ def capacity_engine():
     if len(cap) == 0 or len(orders) == 0:
         return cap, []
 
-    demand_total = orders["qty"].sum() if "qty" in orders else 0
-    total_capacity = cap["daily_capacity"].sum() if "daily_capacity" in cap else 1
+    demand_total = orders["qty"].sum()
+    total_capacity = cap["daily_capacity"].sum()
 
     utilization = (demand_total/(total_capacity+1))*100
     cap["utilization"] = utilization
@@ -205,10 +182,12 @@ def capacity_engine():
 
     return cap, cap_alerts
 
+
 capacity_df, capacity_alerts = capacity_engine()
 
+
 # ==========================================================
-# 💰 KPI ENGINE (BUSINESS METRICS)
+# KPI ENGINE
 # ==========================================================
 def calc_kpis():
 
@@ -220,8 +199,27 @@ def calc_kpis():
 
     return revenue, inv_value, service_level, capacity_util
 
+
 # ==========================================================
-# 📊 SAFE CHART BUILDER
+# DEMAND FORECAST ENGINE
+# ==========================================================
+def forecast_demand():
+
+    if len(orders) < 10:
+        return pd.DataFrame()
+
+    df = orders.copy()
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+
+    forecast = df.groupby("date")["qty"].sum().reset_index()
+    forecast["forecast"] = forecast["qty"].rolling(7).mean()
+
+    return forecast
+
+
+forecast_df = forecast_demand()
+# ==========================================================
+# SAFE CHART BUILDER
 # ==========================================================
 def safe_bar_chart(df,x,y,color=None,title="Chart"):
     try:
@@ -234,7 +232,7 @@ def safe_bar_chart(df,x,y,color=None,title="Chart"):
         st.warning("Not enough data to display this chart yet.")
 
 # ==========================================================
-# 📌 NAVIGATION MENU
+# NAVIGATION MENU
 # ==========================================================
 menu = st.sidebar.selectbox(
     "Navigation",
@@ -242,7 +240,7 @@ menu = st.sidebar.selectbox(
 )
 
 # ==========================================================
-# 🎛 CONTROL TOWER DASHBOARD
+# CONTROL TOWER DASHBOARD
 # ==========================================================
 if menu=="Control Tower":
 
@@ -260,7 +258,6 @@ if menu=="Control Tower":
         st.info(cap_alert)
 
     st.divider()
-
     st.subheader("⚠️ Recommended Actions")
 
     for action,item in actions:
@@ -273,11 +270,11 @@ if menu=="Control Tower":
         if col3.button("Reject", key=f"r{item}"):
             st.error(f"{item} action rejected")
 
-    st.subheader("📦 Projected Stock Levels")
+    st.subheader("Projected Stock Levels")
     st.dataframe(balanced)
 
 # ==========================================================
-# 📊 ANALYTICS DASHBOARD
+# ANALYTICS DASHBOARD
 # ==========================================================
 elif menu=="Analytics":
 
@@ -289,7 +286,7 @@ elif menu=="Analytics":
         fig=px.pie(orders,names="category",values="qty",title="Demand by Category")
         st.plotly_chart(fig,use_container_width=True)
     except:
-        st.warning("Upload more order data for category insights.")
+        st.warning("Upload more order data.")
 
     try:
         cust=orders.groupby("customer")["qty"].sum().reset_index()
@@ -297,13 +294,12 @@ elif menu=="Analytics":
     except:
         pass
 
-    try:
-        suppliers["risk"]=suppliers["lead_time"]*(1-suppliers["reliability"])
-        safe_bar_chart(suppliers,"supplier","risk",None,"Supplier Risk")
-    except:
-        pass
+    if len(forecast_df)>0:
+        st.subheader("🔮 Demand Forecast")
+        st.plotly_chart(px.line(forecast_df,x="date",y=["qty","forecast"]))
+
 # ==========================================================
-# 🤖 AI ASSISTANT (Cloud + Offline Fallback)
+# AI ASSISTANT
 # ==========================================================
 elif menu=="AI Assistant":
 
@@ -312,24 +308,14 @@ elif menu=="AI Assistant":
 
     if q:
 
-        # --- Try real AI ---
         if AI_AVAILABLE:
             try:
-                context=f"""
-                Inventory:
-                {inventory.head()}
-
-                Orders:
-                {orders.head()}
-
-                Suppliers:
-                {suppliers.head()}
-                """
+                context=f"{inventory.head()}\n{orders.head()}\n{suppliers.head()}"
 
                 res = client.chat.completions.create(
                     model="gpt-4.1-mini",
                     messages=[
-                        {"role":"system","content":"You are a supply chain planning assistant."},
+                        {"role":"system","content":"You are a supply chain planner."},
                         {"role":"user","content":context+"\nQuestion:"+q}
                     ]
                 )
@@ -337,21 +323,13 @@ elif menu=="AI Assistant":
 
             except:
                 st.warning("AI cloud unavailable → using offline planner")
-                AI_LOCAL=True
-        else:
-            AI_LOCAL=True
 
-        # --- Offline rule based assistant ---
-        if 'AI_LOCAL' in locals():
-            low = balanced[balanced["projected_stock"] < balanced["safety"]]
-            st.info("📊 Built-in Supply Planner Suggestions")
-            for i in low["item"]:
-                st.write(f"• Expedite purchase for **{i}**")
-            st.write("• Review supplier lead times")
-            st.write("• Adjust batch sizes")
+        low = balanced[balanced["projected_stock"] < balanced["safety"]]
+        for i in low["item"]:
+            st.write(f"• Expedite purchase for **{i}**")
 
 # ==========================================================
-# 🎤 VOICE ASSISTANT (Demo Mode)
+# VOICE ASSISTANT (Demo)
 # ==========================================================
 elif menu=="Voice Assistant":
 
@@ -367,27 +345,7 @@ elif menu=="Voice Assistant":
             st.write("Command not recognised")
 
 # ==========================================================
-# 📈 DEMAND FORECASTING MODULE
-# ==========================================================
-def forecast_demand():
-
-    if len(orders) < 10:
-        return pd.DataFrame()
-
-    df = orders.copy()
-    df["date"] = pd.to_datetime(df["date"], errors="coerce")
-    forecast = df.groupby("date")["qty"].sum().reset_index()
-    forecast["forecast"] = forecast["qty"].rolling(7).mean()
-    return forecast
-
-forecast_df = forecast_demand()
-
-if menu=="Analytics" and len(forecast_df)>0:
-    st.subheader("🔮 Demand Forecast")
-    st.plotly_chart(px.line(forecast_df,x="date",y=["qty","forecast"]))
-
-# ==========================================================
-# 📲 WHATSAPP ALERT ENGINE (Twilio Ready)
+# WHATSAPP ALERT ENGINE
 # ==========================================================
 def send_whatsapp_alert(message):
     try:
@@ -406,7 +364,7 @@ for action,item in actions:
         send_whatsapp_alert(f"URGENT: Stockout risk for {item}")
 
 # ==========================================================
-# 💳 STRIPE BILLING (Demo UI)
+# STRIPE BILLING (UI)
 # ==========================================================
 st.sidebar.subheader("💳 Subscription")
 plan = st.sidebar.selectbox("Plan",["Free","Pro ₹999/mo","Enterprise ₹2999/mo"])
@@ -414,7 +372,7 @@ if st.sidebar.button("Upgrade"):
     st.sidebar.success("Stripe checkout would open here")
 
 # ==========================================================
-# ⚙️ PLANNING SETTINGS PAGE
+# PLANNING SETTINGS
 # ==========================================================
 elif menu=="Planning Settings":
     st.title("⚙️ Planning Parameters")
@@ -424,18 +382,15 @@ elif menu=="Planning Settings":
     st.success("Parameters updated")
 
 # ==========================================================
-# 🗺 LIVE WAREHOUSE MAP
+# LIVE MAP
 # ==========================================================
 elif menu=="Live Map":
     st.title("🗺 Warehouse Network")
-    map_df=pd.DataFrame({
-        "lat":[13.08,9.92,11.01],
-        "lon":[80.27,78.12,76.96]
-    })
+    map_df=pd.DataFrame({"lat":[13.08,9.92,11.01],"lon":[80.27,78.12,76.96]})
     st.map(map_df)
 
 # ==========================================================
-# 📤 DATA UPLOAD (Excel/CSV)
+# DATA UPLOAD
 # ==========================================================
 elif menu=="Upload Data":
 
@@ -447,10 +402,10 @@ elif menu=="Upload Data":
         df = pd.read_excel(file) if file.name.endswith(".xlsx") else pd.read_csv(file)
         df.columns=df.columns.str.lower().str.replace(" ","_")
         df.to_sql(f"{table}_{persona_key}",get_conn(),if_exists="replace",index=False)
-        st.success("Data uploaded successfully")
+        st.success("Data uploaded")
 
 # ==========================================================
-# ✍️ MANUAL ENTRY
+# MANUAL ENTRY
 # ==========================================================
 elif menu=="Manual Entry":
 
