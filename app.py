@@ -307,27 +307,26 @@ k2.metric("📦 Inventory Value", f"₹{int(inv_value):,}")
 k3.metric("📈 Service Level", f"{service}%")
 k4.metric("🏭 Capacity Utilization", f"{int(util)}%")
 
-    c1.metric("Orders",len(orders))
-    unique_items = inventory["item"].nunique() if "item" in inventory.columns else 0
-    c2.metric("Inventory SKUs", unique_items)
+c1.metric("Orders",len(orders))
+unique_items = inventory["item"].nunique() if "item" in inventory.columns else 0
+c2.metric("Inventory SKUs", unique_items)
 
-    c3.metric("Alerts",len(actions))
+c3.metric("Alerts",len(actions))
 
-    st.subheader("⚠️ Recommended Actions")
-    for action,item in actions:
-
+st.subheader("⚠️ Recommended Actions")
+for action,item in actions:
     col1,col2,col3 = st.columns([4,1,1])
     col1.write(f"{action} → {item}")
 
-    if col2.button("Approve", key=f"a{item}"):
-        st.success(f"{item} action approved")
+if col2.button("Approve", key=f"a{item}"):
+    st.success(f"{item} action approved")
 
-    if col3.button("Reject", key=f"r{item}"):
-        st.error(f"{item} action rejected")
+if col3.button("Reject", key=f"r{item}"):
+    st.error(f"{item} action rejected")
 
 
-    st.subheader("Projected Stock Levels")
-    st.dataframe(balanced)
+st.subheader("Projected Stock Levels")
+st.dataframe(balanced)
 
 # ==========================================================
 # ANALYTICS DASHBOARD
