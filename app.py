@@ -471,13 +471,13 @@ elif menu=="Upload Data":
             "utilization"
         ]
 
-    for col in required_cols:
-        if col not in df.columns:
-            df[col] = 0
+for col in required_cols:
+    if col not in df.columns:
+        df[col] = 0
 
 
-        df.to_sql(f"{table}_{persona_key}",get_conn(),if_exists="replace",index=False)
-        st.success("Data uploaded")
+df.to_sql(f"{table}_{persona_key}",get_conn(),if_exists="replace",index=False)
+st.success("Data uploaded")
 
 # ==========================================================
 # MANUAL ENTRY
