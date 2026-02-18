@@ -263,6 +263,7 @@ def forecast_demand():
     forecast["forecast"] = forecast["qty"].rolling(7).mean()
 
     return forecast
+forecast_df = forecast_demand()
 
 # ==========================================================
 # SAFE CHART BUILDER
