@@ -209,9 +209,8 @@ def balancing_engine():
 
 
         elif r["projected_stock"] < r["safety"]:
-            elif r["projected_stock"] < r["safety"]:
-                actions.append(("⚠️ Increase Production", r["item"]))
-                actions.append(("📦 Pull Purchase Order Earlier", r["item"]))
+            actions.append(("⚠️ Increase Production", r["item"]))
+            actions.append(("📦 Pull Purchase Order Earlier", r["item"]))
 
         elif r["projected_stock"] > r["safety"] * 5:
             actions.append(("🛑 Reduce Batch Size", r["item"]))
