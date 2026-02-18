@@ -127,25 +127,34 @@ for col in ord_required:
     if col not in ord_df.columns:
         ord_df[col] = 0
 
-# --------------------------------------------------
-# DEMAND AGGREGATION (SAFE)
-# --------------------------------------------------
-if len(ord_df) == 0:
-    demand = pd.DataFrame({"item":df["item"],"forecast_demand":0})
-else:
-    demand = ord_df.groupby("item")["qty"].sum().reset_index()
-    demand.rename(columns={"qty":"forecast_demand"}, inplace=True)
+def balancing_engine():
 
-    demand.rename(columns={"qty":"forecast_demand"}, inplace=True)
+    df = inventory.copy()
+    ord_df = orders.copy()
+
+    if "item" not in df.columns:
+        df["item"] = ""
+    if "on_hand" not in df.columns:
+        df["on_hand"] = 0
+    if "wip" not in df.columns:
+        df["wip"] = 0
+    if "safety" not in df.columns:
+        df["safety"] = 100
+
+    if "item" not in ord_df.columns:
+        ord_df["item"] = ""
+    if "qty" not in ord_df.columns:
+        ord_df["qty"] = 0
+
+    demand = ord_df.groupby("item")["qty"].sum().reset_index()
+    demand.rename(columns={"qty": "forecast_demand"}, inplace=True)
 
     df = df.merge(demand, on="item", how="left")
     df["forecast_demand"] = df["forecast_demand"].fillna(0)
 
-    # stock projection
     df["available_stock"] = df["on_hand"] + df["wip"]
     df["projected_stock"] = df["available_stock"] - df["forecast_demand"]
 
-    # recommendation engine
     actions = []
 
     for _, r in df.iterrows():
@@ -170,8 +179,6 @@ else:
 
     return df, actions
 
-
-balanced, actions = balancing_engine()
 # ==========================================================
 # 🏭 CAPACITY UTILIZATION ENGINE
 # ==========================================================
