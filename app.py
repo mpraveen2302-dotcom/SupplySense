@@ -66,6 +66,17 @@ lead_time INT,
 moq INT
 )
 """)
+# ==========================================================
+# 🔁 PRODUCT SUBSTITUTION MATRIX (NEW FEATURE)
+# ==========================================================
+SUBSTITUTIONS = {
+    "Milk": ["Milk Powder","Almond Milk"],
+    "Bread": ["Buns","Rusk"],
+    "Eggs": ["Paneer","Tofu"],
+    "Rice": ["Wheat","Millets"],
+    "Sugar": ["Jaggery","Honey"],
+    "Oil": ["Butter","Ghee"]
+}
 
 
 # ==========================================================
@@ -184,16 +195,29 @@ def balancing_engine():
 
     for _, r in df.iterrows():
 
+
         if r["projected_stock"] < 0:
             actions.append(("🚨 Expedite Supplier", r["item"]))
+                        # 🔁 Suggest substitute products (NEW)
+            if r["item"] in SUBSTITUTIONS:
+                alt = ", ".join(SUBSTITUTIONS[r["item"]])
+                actions.append((f"🔁 Offer Substitutes: {alt}", r["item"]))
+
+                # 🔄 Production sequence change (NEW)
+        elif r["forecast_demand"] > r["available_stock"] * 1.2:
+            actions.append(("🔀 Change Production Sequence", r["item"]))
+
 
         elif r["projected_stock"] < r["safety"]:
-            actions.append(("⚠️ Increase Production", r["item"]))
+            elif r["projected_stock"] < r["safety"]:
+                actions.append(("⚠️ Increase Production", r["item"]))
+                actions.append(("📦 Pull Purchase Order Earlier", r["item"]))
 
         elif r["projected_stock"] > r["safety"] * 5:
             actions.append(("🛑 Reduce Batch Size", r["item"]))
 
         elif r["projected_stock"] > r["safety"] * 3:
+            actions.append(("⏳ Push Purchase Order Later", r["item"]))
             actions.append(("📦 Run Promotion", r["item"]))
 
         elif r["projected_stock"] < r["safety"] * 0.5:
