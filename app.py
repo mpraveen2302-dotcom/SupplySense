@@ -1,7 +1,7 @@
 # ==========================================================
 # SUPPLYSENSE – FINAL MASTER BUILD (TANCAM READY)
 # Real-Time Supply–Demand Balancing Control Tower for MSMEs
-# MULTI-TENANT + AI + ANALYTICS + SAFE MODE
+# MULTI-TENANT + AI + ANALYTICS + WHATSAPP + FORECASTING
 # ==========================================================
 
 import streamlit as st
@@ -9,16 +9,18 @@ import pandas as pd
 import numpy as np
 import sqlite3
 import plotly.express as px
+import datetime
 
 st.set_page_config(layout="wide")
+
 # ==========================================================
-# REAL-TIME REFRESH INDICATOR
+# ⏱ REAL-TIME REFRESH INDICATOR
 # ==========================================================
-import datetime
 st.sidebar.write("⏱ Last updated:", datetime.datetime.now().strftime("%H:%M:%S"))
 
-
-# ---------- SAFE OPENAI IMPORT ----------
+# ==========================================================
+# 🤖 SAFE OPENAI IMPORT (optional cloud AI)
+# ==========================================================
 AI_AVAILABLE = True
 try:
     from openai import OpenAI
@@ -27,7 +29,7 @@ except:
     AI_AVAILABLE = False
 
 # ==========================================================
-# DATABASE CONNECTION
+# 💾 DATABASE CONNECTION (Streamlit Safe SQLite)
 # ==========================================================
 @st.cache_resource
 def get_conn():
@@ -35,12 +37,11 @@ def get_conn():
 
 def run_query(q,p=()):
     conn=get_conn()
-    cur=conn.cursor()
-    cur.execute(q,p)
+    conn.execute(q,p)
     conn.commit()
 
 # ==========================================================
-# CREATE BASE TABLES (used for demo seeding only)
+# 🗄 CREATE BASE TABLES (for first run)
 # ==========================================================
 run_query("""CREATE TABLE IF NOT EXISTS orders(
 order_id TEXT,date TEXT,customer TEXT,city TEXT,channel TEXT,
@@ -54,73 +55,17 @@ run_query("""CREATE TABLE IF NOT EXISTS suppliers(
 supplier TEXT,item TEXT,country TEXT,lead_time INT,
 moq INT,reliability FLOAT,cost_per_unit FLOAT)""")
 
-# ==========================================================
-# NEW TABLE → PRODUCTION CAPACITY
-# ==========================================================
 run_query("""CREATE TABLE IF NOT EXISTS capacity(
-warehouse TEXT,
-machine TEXT,
-daily_capacity INT,
-shift_hours INT,
-utilization FLOAT
-)""")
-
+warehouse TEXT,machine TEXT,daily_capacity INT,
+shift_hours INT,utilization FLOAT)""")
 
 # ==========================================================
-# DEMO DATA SEEDER
-# ==========================================================
-def seed_demo_data():
-
-    conn=get_conn()
-    cur=conn.cursor()
-
-    if cur.execute("SELECT COUNT(*) FROM orders").fetchone()[0] > 0:
-        return
-
-    items=["Milk","Bread","Eggs","Juice","Rice","Sugar","Biscuits","Oil"]
-    cats=["Dairy","Bakery","Dairy","Beverage","Grocery","Grocery","Snacks","Grocery"]
-    customers=["Retailer A","Hotel B","Online C","Supermarket D"]
-    cities=["Chennai","Madurai","Coimbatore","Salem"]
-    warehouses=["Chennai Hub","Madurai Hub","Coimbatore Hub"]
-    suppliers_list=["ABC Foods","Fresh Farms","Dairy Best"]
-
-    for i in range(120):
-        idx=np.random.randint(0,len(items))
-        cur.execute("INSERT INTO orders VALUES (?,?,?,?,?,?,?,?,?,?)",
-        (f"O{i}","2025-01-"+str(np.random.randint(1,28)),
-         np.random.choice(customers),
-         np.random.choice(cities),
-         "Retail",items[idx],cats[idx],
-         np.random.randint(20,150),
-         np.random.randint(20,120),"Normal"))
-
-    for w in warehouses:
-        for i,item in enumerate(items):
-            cur.execute("INSERT INTO inventory VALUES (?,?,?,?,?,?,?,?,?)",
-            (item,w,cats[i],np.random.choice(suppliers_list),
-             np.random.randint(200,600),np.random.randint(50,200),
-             150,150,np.random.randint(10,40)))
-
-    for s in suppliers_list:
-        for item in items:
-            cur.execute("INSERT INTO suppliers VALUES (?,?,?,?,?,?,?)",
-            (s,item,"India",
-             np.random.randint(2,10),
-             np.random.randint(100,400),
-             round(np.random.uniform(0.7,0.95),2),
-             np.random.randint(10,40)))
-
-    conn.commit()
-
-seed_demo_data()
-
-# ==========================================================
-# PERSONA SELECTOR (RUNS FIRST)
+# 👥 PERSONA WORKSPACES (MULTI-TENANT)
 # ==========================================================
 st.sidebar.title("👥 MSME Personas")
 
 persona = st.sidebar.selectbox(
-    "Choose Persona Workspace",
+    "Choose Workspace",
     ["Owner Rajesh","Planner Kavitha","Warehouse Arun","Supplier ABC Foods"]
 )
 
@@ -131,8 +76,18 @@ persona_key = {
     "Supplier ABC Foods":"supplier"
 }[persona]
 
+# Persona description (for judges demo storytelling)
+if persona=="Owner Rajesh":
+    st.sidebar.info("Concern: Cash flow & missed deliveries")
+elif persona=="Planner Kavitha":
+    st.sidebar.info("Concern: Rescheduling & firefighting")
+elif persona=="Warehouse Arun":
+    st.sidebar.info("Concern: Overstock & storage space")
+elif persona=="Supplier ABC Foods":
+    st.sidebar.info("Concern: Sudden urgent purchase orders")
+
 # ==========================================================
-# TABLE LOADER
+# 📥 TABLE LOADER
 # ==========================================================
 def get_table(name):
     try:
@@ -140,107 +95,74 @@ def get_table(name):
     except:
         return pd.DataFrame()
 
-# Load persona workspace tables
-orders = get_table(f"orders_{persona_key}")
-inventory = get_table(f"inventory_{persona_key}")
-suppliers = get_table(f"suppliers_{persona_key}")
+orders     = get_table(f"orders_{persona_key}")
+inventory  = get_table(f"inventory_{persona_key}")
+suppliers  = get_table(f"suppliers_{persona_key}")
 
-# ==========================================================
-# LOAD CAPACITY DATA (PER PERSONA)
-# ==========================================================
 def load_capacity():
     try:
-        return pd.read_sql(f"SELECT * FROM capacity_{persona_key}", get_conn())
+        return pd.read_sql(f"SELECT * FROM capacity_{persona_key}",get_conn())
     except:
         return pd.DataFrame(columns=["warehouse","machine","daily_capacity","shift_hours","utilization"])
 
 # ==========================================================
-# SAFE SUPPLY–DEMAND BALANCING ENGINE
+# 🧠 REAL-TIME SUPPLY-DEMAND BALANCING ENGINE
 # ==========================================================
 def balancing_engine():
 
     df = inventory.copy()
     ord_df = orders.copy()
 
-    # Create missing columns automatically
-    inv_required = {
-        "item": "",
-        "on_hand": 0,
-        "wip": 0,
-        "safety": 100
-    }
-
-    for col, default in inv_required.items():
+    # auto create missing columns
+    for col in ["item","on_hand","wip","safety"]:
         if col not in df.columns:
-            df[col] = default
-
-    if "item" not in ord_df.columns:
-        ord_df["item"] = ""
+            df[col] = 0
 
     if "qty" not in ord_df.columns:
         ord_df["qty"] = 0
 
+    # demand aggregation
     demand = ord_df.groupby("item")["qty"].sum().reset_index()
     demand.rename(columns={"qty":"forecast_demand"}, inplace=True)
 
     df = df.merge(demand, on="item", how="left")
     df["forecast_demand"] = df["forecast_demand"].fillna(0)
 
+    # stock projection
     df["available_stock"] = df["on_hand"] + df["wip"]
     df["projected_stock"] = df["available_stock"] - df["forecast_demand"]
 
+    # recommendation engine
     actions = []
 
-for _, r in df.iterrows():
-
-    if r["projected_stock"] < 0:
-        actions.append(("🚨 Expedite Supplier", r["item"]))
-
-    elif r["projected_stock"] < r["safety"]:
-        actions.append(("⚠️ Increase Production", r["item"]))
-
-    elif r["projected_stock"] > r["safety"] * 3:
-        actions.append(("📦 Run Promotion", r["item"]))
-
-    elif r["projected_stock"] > r["safety"] * 5:
-        actions.append(("🛑 Reduce Batch Size", r["item"]))
-
-    elif r["projected_stock"] < r["safety"] * 0.5:
-        actions.append(("🔄 Reallocate Inventory", r["item"]))
-
-    else:
-        actions.append(("✅ Balanced", r["item"]))
-
-
+    for _, r in df.iterrows():
         if r["projected_stock"] < 0:
-            actions.append(f"🚨 STOCKOUT risk for {r['item']} → Expedite supplier")
-
+            actions.append(("🚨 Expedite Supplier", r["item"]))
         elif r["projected_stock"] < r["safety"]:
-            actions.append(f"⚠️ Low stock {r['item']} → Increase production")
-
+            actions.append(("⚠️ Increase Production", r["item"]))
         elif r["projected_stock"] > r["safety"] * 3:
-            actions.append(f"📦 Overstock {r['item']} → Run promotion")
-
+            actions.append(("📦 Run Promotion", r["item"]))
+        elif r["projected_stock"] > r["safety"] * 5:
+            actions.append(("🛑 Reduce Batch Size", r["item"]))
+        elif r["projected_stock"] < r["safety"] * 0.5:
+            actions.append(("🔄 Reallocate Inventory", r["item"]))
         else:
-            actions.append(f"✅ {r['item']} Balanced")
+            actions.append(("✅ Balanced", r["item"]))
 
     return df, actions
 
-
 balanced, actions = balancing_engine()
-
 # ==========================================================
-# CAPACITY UTILIZATION ENGINE
+# 🏭 CAPACITY UTILIZATION ENGINE
 # ==========================================================
 def capacity_engine():
 
     cap = load_capacity()
-    orders_df = orders.copy()
 
-    if len(cap)==0 or len(orders_df)==0:
+    if len(cap) == 0 or len(orders) == 0:
         return cap, []
 
-    demand_total = orders_df["qty"].sum() if "qty" in orders_df else 0
+    demand_total = orders["qty"].sum() if "qty" in orders else 0
     total_capacity = cap["daily_capacity"].sum() if "daily_capacity" in cap else 1
 
     utilization = (demand_total/(total_capacity+1))*100
@@ -259,7 +181,7 @@ def capacity_engine():
 capacity_df, capacity_alerts = capacity_engine()
 
 # ==========================================================
-# KPI BUSINESS METRICS
+# 💰 KPI ENGINE (BUSINESS METRICS)
 # ==========================================================
 def calc_kpis():
 
@@ -271,10 +193,8 @@ def calc_kpis():
 
     return revenue, inv_value, service_level, capacity_util
 
-
-
 # ==========================================================
-# SAFE CHART BUILDER
+# 📊 SAFE CHART BUILDER
 # ==========================================================
 def safe_bar_chart(df,x,y,color=None,title="Chart"):
     try:
@@ -287,51 +207,53 @@ def safe_bar_chart(df,x,y,color=None,title="Chart"):
         st.warning("Not enough data to display this chart yet.")
 
 # ==========================================================
-# NAVIGATION MENU
+# 📌 NAVIGATION MENU
 # ==========================================================
-menu = st.sidebar.selectbox("Navigation",
-["Control Tower","Analytics","AI Assistant","Planning Settings","Live Map","Upload Data","Manual Entry"])
-
+menu = st.sidebar.selectbox(
+    "Navigation",
+    ["Control Tower","Analytics","AI Assistant","Voice Assistant","Planning Settings","Live Map","Upload Data","Manual Entry"]
+)
 
 # ==========================================================
-# CONTROL TOWER
+# 🎛 CONTROL TOWER DASHBOARD
 # ==========================================================
 if menu=="Control Tower":
+
     st.title("🏭 SupplySense Control Tower")
 
     revenue,inv_value,service,util = calc_kpis()
 
-k1,k2,k3,k4 = st.columns(4)
-k1.metric("💰 Revenue", f"₹{int(revenue):,}")
-k2.metric("📦 Inventory Value", f"₹{int(inv_value):,}")
-k3.metric("📈 Service Level", f"{service}%")
-k4.metric("🏭 Capacity Utilization", f"{int(util)}%")
+    k1,k2,k3,k4 = st.columns(4)
+    k1.metric("💰 Revenue", f"₹{int(revenue):,}")
+    k2.metric("📦 Inventory Value", f"₹{int(inv_value):,}")
+    k3.metric("📈 Service Level", f"{service}%")
+    k4.metric("🏭 Capacity Utilization", f"{int(util)}%")
 
-c1.metric("Orders",len(orders))
-unique_items = inventory["item"].nunique() if "item" in inventory.columns else 0
-c2.metric("Inventory SKUs", unique_items)
+    for cap_alert in capacity_alerts:
+        st.info(cap_alert)
 
-c3.metric("Alerts",len(actions))
+    st.divider()
 
-st.subheader("⚠️ Recommended Actions")
-for action,item in actions:
-    col1,col2,col3 = st.columns([4,1,1])
-    col1.write(f"{action} → {item}")
+    st.subheader("⚠️ Recommended Actions")
 
-if col2.button("Approve", key=f"a{item}"):
-    st.success(f"{item} action approved")
+    for action,item in actions:
+        col1,col2,col3 = st.columns([4,1,1])
+        col1.write(f"{action} → {item}")
 
-if col3.button("Reject", key=f"r{item}"):
-    st.error(f"{item} action rejected")
+        if col2.button("Approve", key=f"a{item}"):
+            st.success(f"{item} action approved")
 
+        if col3.button("Reject", key=f"r{item}"):
+            st.error(f"{item} action rejected")
 
-st.subheader("Projected Stock Levels")
-st.dataframe(balanced)
+    st.subheader("📦 Projected Stock Levels")
+    st.dataframe(balanced)
 
 # ==========================================================
-# ANALYTICS DASHBOARD
+# 📊 ANALYTICS DASHBOARD
 # ==========================================================
 elif menu=="Analytics":
+
     st.title("📊 Demand & Inventory Insights")
 
     safe_bar_chart(inventory,"warehouse","on_hand","category","Inventory by Warehouse")
@@ -353,27 +275,27 @@ elif menu=="Analytics":
         safe_bar_chart(suppliers,"supplier","risk",None,"Supplier Risk")
     except:
         pass
-
 # ==========================================================
-# AI ASSISTANT (Hybrid Cloud + Offline)
+# 🤖 AI ASSISTANT (Cloud + Offline Fallback)
 # ==========================================================
 elif menu=="AI Assistant":
-    st.title("🤖 Ask SupplySense")
 
-    q = st.text_input("Ask planning question")
+    st.title("🤖 Ask SupplySense")
+    q = st.text_input("Ask a planning question")
 
     if q:
 
+        # --- Try real AI ---
         if AI_AVAILABLE:
             try:
-                context = f"""
+                context=f"""
                 Inventory:
                 {inventory.head()}
 
                 Orders:
                 {orders.head()}
 
-                Supplier lead times:
+                Suppliers:
                 {suppliers.head()}
                 """
 
@@ -381,103 +303,139 @@ elif menu=="AI Assistant":
                     model="gpt-4.1-mini",
                     messages=[
                         {"role":"system","content":"You are a supply chain planning assistant."},
-                        {"role":"user","content":context + "\nQuestion: " + q}
+                        {"role":"user","content":context+"\nQuestion:"+q}
                     ]
                 )
-
                 st.success(res.choices[0].message.content)
 
             except:
-                st.warning("AI cloud unavailable → switching to built-in planner")
+                st.warning("AI cloud unavailable → using offline planner")
                 AI_LOCAL=True
         else:
             AI_LOCAL=True
 
-        # Offline fallback AI
+        # --- Offline rule based assistant ---
         if 'AI_LOCAL' in locals():
-            low_stock = balanced[balanced["projected_stock"] < balanced["safety"]]
-            st.info("📊 Built-in SupplySense Planner")
-
-            if len(low_stock)>0:
-                for item in low_stock["item"].tolist():
-                    st.write(f"• Expedite purchase for **{item}**")
-
+            low = balanced[balanced["projected_stock"] < balanced["safety"]]
+            st.info("📊 Built-in Supply Planner Suggestions")
+            for i in low["item"]:
+                st.write(f"• Expedite purchase for **{i}**")
             st.write("• Review supplier lead times")
             st.write("• Adjust batch sizes")
-            st.write("• Monitor weekly demand")
-            # ==========================================================
-# PLANNING SETTINGS PAGE
+
+# ==========================================================
+# 🎤 VOICE ASSISTANT (Demo Mode)
+# ==========================================================
+elif menu=="Voice Assistant":
+
+    st.title("🎤 Voice Assistant")
+    cmd = st.text_input("Type your voice command")
+
+    if cmd:
+        if "stock" in cmd.lower():
+            st.write(actions)
+        elif "supplier" in cmd.lower():
+            st.write(suppliers.head())
+        else:
+            st.write("Command not recognised")
+
+# ==========================================================
+# 📈 DEMAND FORECASTING MODULE
+# ==========================================================
+def forecast_demand():
+
+    if len(orders) < 10:
+        return pd.DataFrame()
+
+    df = orders.copy()
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    forecast = df.groupby("date")["qty"].sum().reset_index()
+    forecast["forecast"] = forecast["qty"].rolling(7).mean()
+    return forecast
+
+forecast_df = forecast_demand()
+
+if menu=="Analytics" and len(forecast_df)>0:
+    st.subheader("🔮 Demand Forecast")
+    st.plotly_chart(px.line(forecast_df,x="date",y=["qty","forecast"]))
+
+# ==========================================================
+# 📲 WHATSAPP ALERT ENGINE (Twilio Ready)
+# ==========================================================
+def send_whatsapp_alert(message):
+    try:
+        from twilio.rest import Client
+        client_twilio = Client(st.secrets["TWILIO_SID"],st.secrets["TWILIO_TOKEN"])
+        client_twilio.messages.create(
+            from_='whatsapp:+14155238886',
+            body=message,
+            to='whatsapp:+91XXXXXXXXXX'
+        )
+    except:
+        pass
+
+for action,item in actions:
+    if "🚨" in action:
+        send_whatsapp_alert(f"URGENT: Stockout risk for {item}")
+
+# ==========================================================
+# 💳 STRIPE BILLING (Demo UI)
+# ==========================================================
+st.sidebar.subheader("💳 Subscription")
+plan = st.sidebar.selectbox("Plan",["Free","Pro ₹999/mo","Enterprise ₹2999/mo"])
+if st.sidebar.button("Upgrade"):
+    st.sidebar.success("Stripe checkout would open here")
+
+# ==========================================================
+# ⚙️ PLANNING SETTINGS PAGE
 # ==========================================================
 elif menu=="Planning Settings":
     st.title("⚙️ Planning Parameters")
+    st.slider("Safety Stock",50,500,150)
+    st.slider("Lead Time",1,15,5)
+    st.slider("Minimum Order Qty",50,500,200)
+    st.success("Parameters updated")
 
-    safety = st.slider("Default Safety Stock",50,500,150)
-    lead = st.slider("Avg Supplier Lead Time (days)",1,15,5)
-    moq = st.slider("Min Order Quantity",50,500,200)
-
-    st.success("Parameters updated for planning engine")
 # ==========================================================
-# LIVE WAREHOUSE MAP
+# 🗺 LIVE WAREHOUSE MAP
 # ==========================================================
 elif menu=="Live Map":
-    st.title("🗺️ Warehouse Network")
-
-    map_df = pd.DataFrame({
+    st.title("🗺 Warehouse Network")
+    map_df=pd.DataFrame({
         "lat":[13.08,9.92,11.01],
-        "lon":[80.27,78.12,76.96],
-        "warehouse":["Chennai","Madurai","Coimbatore"]
+        "lon":[80.27,78.12,76.96]
     })
-
     st.map(map_df)
 
-
-
 # ==========================================================
-# DATA UPLOAD (PER PERSONA WORKSPACE)
+# 📤 DATA UPLOAD (Excel/CSV)
 # ==========================================================
 elif menu=="Upload Data":
-    st.title("📤 Upload Excel / CSV")
 
-    table = st.selectbox("Select table", ["orders","inventory","suppliers"])
-    file = st.file_uploader("Upload dataset")
+    st.title("Upload Dataset")
+    table = st.selectbox("Table",["orders","inventory","suppliers"])
+    file = st.file_uploader("Upload file")
 
     if file:
         df = pd.read_excel(file) if file.name.endswith(".xlsx") else pd.read_csv(file)
-
-        # auto clean columns
-        df.columns = (
-            df.columns
-            .str.strip()
-            .str.lower()
-            .str.replace(" ", "_")
-            .str.replace("-", "_")
-        )
-
-        st.write("Detected columns:", df.columns.tolist())
-
-        conn = get_conn()
-        table_name = f"{table}_{persona_key}"
-        df.to_sql(table_name, conn, if_exists="replace", index=False)
-
-        st.success(f"Dataset uploaded for {persona}")
+        df.columns=df.columns.str.lower().str.replace(" ","_")
+        df.to_sql(f"{table}_{persona_key}",get_conn(),if_exists="replace",index=False)
+        st.success("Data uploaded successfully")
 
 # ==========================================================
-# MANUAL ORDER ENTRY
+# ✍️ MANUAL ENTRY
 # ==========================================================
 elif menu=="Manual Entry":
-    st.title("➕ Add New Order")
+
+    st.title("Add New Order")
 
     item = st.text_input("Item")
-    qty = st.number_input("Quantity")
+    qty  = st.number_input("Quantity")
 
     if st.button("Add Order"):
         run_query(
             f"INSERT INTO orders_{persona_key} VALUES (?,?,?,?,?,?,?,?,?,?)",
-            ("NEW","2025-01-01","Retailer","Chennai","Retail",
+            ("NEW","2025-01-01","Retail","Chennai","Retail",
              item,"General",qty,40,"Normal")
         )
         st.success("Order Added!")
-
-# ==========================================================
-# END OF APPLICATION
-# ==========================================================
