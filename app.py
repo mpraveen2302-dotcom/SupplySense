@@ -1,3 +1,4 @@
+elif menu=="Upload Data":
 # ==========================================================
 # SUPPLYSENSE – FINAL MASTER BUILD (TANCAM READY)
 # Real-Time Supply–Demand Balancing Control Tower for MSMEs
@@ -735,28 +736,33 @@ elif menu=="Upload Data":
 
     table = st.selectbox(
         "Table",
-        ["orders","inventory","suppliers","capacity"]
+        ["orders","inventory","suppliers","capacity","supply_pool"]
     )
 
     file = st.file_uploader("Upload file")
 
     if file:
 
-        df = pd.read_excel(file) if file.name.endswith(".xlsx") else pd.read_csv(file)
+        # Read file
+        if file.name.endswith(".xlsx"):
+            df = pd.read_excel(file)
+        else:
+            df = pd.read_csv(file)
 
-        # Standardize columns
+        # Standardize column names
         df.columns = df.columns.str.lower().str.replace(" ","_")
-        # Ensure standard naming
-rename_map = {
-    "product":"item",
-    "product_name":"item",
-    "stock":"on_hand",
-    "quantity":"on_hand"
-}
-df.rename(columns=rename_map, inplace=True)
 
+        # Auto rename common column variations
+        rename_map = {
+            "product":"item",
+            "product_name":"item",
+            "stock":"on_hand",
+            "quantity":"on_hand",
+            "qty":"qty"
+        }
+        df.rename(columns=rename_map, inplace=True)
 
-        # Capacity column safety
+        # Capacity table safety columns
         if table == "capacity":
             required_cols = [
                 "warehouse",
@@ -769,7 +775,7 @@ df.rename(columns=rename_map, inplace=True)
                 if col not in df.columns:
                     df[col] = 0
 
-        # Save to persona workspace DB
+        # Save to main database (APPEND mode)
         df.to_sql(
             table,
             get_conn(),
@@ -777,7 +783,8 @@ df.rename(columns=rename_map, inplace=True)
             index=False
         )
 
-        st.success(f"{table} dataset uploaded successfully")
+        st.success(f"{table} dataset uploaded successfully!")
+
 
 # ==========================================================
 # MANUAL ENTRY
