@@ -747,41 +747,26 @@ elif menu=="Upload Data":
         }
         df.rename(columns=rename_map, inplace=True)
 
-        # Capacity table safety columns
-        if table == "capacity":
-            required_cols = [
-                "warehouse",
-                "machine",
-                "daily_capacity",
-                "shift_hours",
-                "utilization"
-            ]
-            for col in required_cols:
-                if col not in df.columns:
-                    df[col] = 0
-
-        # Save to main database (APPEND mode)
         conn = get_conn()
 
-try:
-    existing = pd.read_sql(f"SELECT * FROM {table} LIMIT 1", conn)
-    existing_cols = set(existing.columns)
-    new_cols = set(df.columns)
+        # --- AUTO SCHEMA UPDATE ---
+        try:
+            existing = pd.read_sql(f"SELECT * FROM {table} LIMIT 1", conn)
+            existing_cols = set(existing.columns)
+            new_cols = set(df.columns)
 
-    # Add missing columns to existing table
-    for col in new_cols - existing_cols:
-        run_query(f"ALTER TABLE {table} ADD COLUMN {col} TEXT")
+            for col in new_cols - existing_cols:
+                run_query(f"ALTER TABLE {table} ADD COLUMN {col} TEXT")
+        except:
+            pass  # table doesn't exist yet
 
-except:
-    pass  # table doesn't exist yet → pandas will create it
-
-df.to_sql(
-    table,
-    conn,
-    if_exists="append",
-    index=False
-)
-
+        # --- APPEND DATA ---
+        df.to_sql(
+            table,
+            conn,
+            if_exists="append",
+            index=False
+        )
 
         st.success(f"{table} dataset uploaded successfully!")
 
