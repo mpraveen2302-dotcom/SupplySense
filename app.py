@@ -490,19 +490,21 @@ if menu=="Control Tower":
 
     revenue,inv_value,service,util = calc_kpis()
 
+    # KPI CARDS
     k1,k2,k3,k4 = st.columns(4)
     k1.metric("💵 Sales Generated", f"₹{int(revenue):,}")
     k2.metric("🏦 Working Capital Locked", f"₹{int(inv_value):,}")
     k3.metric("🚚 Order Fulfilment Rate", f"{service}%")
     k4.metric("🏭 Factory Load", f"{int(util)}%")
 
-
+    # Capacity alerts
     for cap_alert in capacity_alerts:
         st.info(cap_alert)
 
     st.divider()
-        st.subheader("⚠️ Recommended Actions")
+    st.subheader("⚠️ Recommended Actions")
 
+    # ACTIONS LOOP
     for i,(action,item) in enumerate(actions):
         col1,col2,col3 = st.columns([4,1,1])
         col1.write(f"{action} → {item}")
@@ -528,11 +530,9 @@ if menu=="Control Tower":
 
             st.error("Action rejected and logged")
 
-
-
-
     st.subheader("Projected Stock Levels")
     st.dataframe(balanced)
+
 st.divider()
 st.subheader("⚡ Instant Order Fulfilment Simulator")
 
