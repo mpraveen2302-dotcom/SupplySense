@@ -40,21 +40,6 @@ def run_query(q,p=()):
 # ==========================================================
 # CREATE BASE TABLES
 # ==========================================================
-run_query("""CREATE TABLE IF NOT EXISTS orders(
-order_id TEXT,date TEXT,customer TEXT,city TEXT,channel TEXT,
-item TEXT,category TEXT,qty INT,unit_price FLOAT,priority TEXT)""")
-
-run_query("""CREATE TABLE IF NOT EXISTS inventory(
-item TEXT,warehouse TEXT,category TEXT,supplier TEXT,
-on_hand INT,wip INT,safety INT,reorder_point INT,unit_cost FLOAT)""")
-
-run_query("""CREATE TABLE IF NOT EXISTS suppliers(
-supplier TEXT,item TEXT,country TEXT,lead_time INT,
-moq INT,reliability FLOAT,cost_per_unit FLOAT)""")
-
-run_query("""CREATE TABLE IF NOT EXISTS capacity(
-warehouse TEXT,machine TEXT,daily_capacity INT,
-shift_hours INT,utilization FLOAT)""")
 
 # ==========================================================
 # NEW TABLE → PLANNING PARAMETERS (PER PERSONA)
@@ -776,12 +761,27 @@ elif menu=="Upload Data":
                     df[col] = 0
 
         # Save to main database (APPEND mode)
-        df.to_sql(
-            table,
-            get_conn(),
-            if_exists="append",
-            index=False
-        )
+        conn = get_conn()
+
+try:
+    existing = pd.read_sql(f"SELECT * FROM {table} LIMIT 1", conn)
+    existing_cols = set(existing.columns)
+    new_cols = set(df.columns)
+
+    # Add missing columns to existing table
+    for col in new_cols - existing_cols:
+        run_query(f"ALTER TABLE {table} ADD COLUMN {col} TEXT")
+
+except:
+    pass  # table doesn't exist yet → pandas will create it
+
+df.to_sql(
+    table,
+    conn,
+    if_exists="append",
+    index=False
+)
+
 
         st.success(f"{table} dataset uploaded successfully!")
 
