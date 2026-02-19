@@ -1,4 +1,4 @@
-elif menu=="Upload Data":
+
 # ==========================================================
 # SUPPLYSENSE – FINAL MASTER BUILD (TANCAM READY)
 # Real-Time Supply–Demand Balancing Control Tower for MSMEs
