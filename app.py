@@ -67,6 +67,44 @@ moq INT
 )
 """)
 # ==========================================================
+# 🆕 ENTERPRISE TABLES (ADD BELOW planning_params)
+# ==========================================================
+
+run_query("""
+CREATE TABLE IF NOT EXISTS order_status(
+order_id TEXT,
+status TEXT,
+last_update TEXT
+)
+""")
+
+run_query("""
+CREATE TABLE IF NOT EXISTS customers(
+customer TEXT,
+phone TEXT,
+email TEXT,
+last_followup TEXT
+)
+""")
+
+run_query("""
+CREATE TABLE IF NOT EXISTS invoices(
+invoice_id TEXT,
+customer TEXT,
+amount FLOAT,
+status TEXT
+)
+""")
+
+run_query("""
+CREATE TABLE IF NOT EXISTS tasks(
+task TEXT,
+assignee TEXT,
+status TEXT
+)
+""")
+
+# ==========================================================
 # 🔁 PRODUCT SUBSTITUTION MATRIX (NEW FEATURE)
 # ==========================================================
 SUBSTITUTIONS = {
@@ -351,8 +389,26 @@ def safe_bar_chart(df,x,y,color=None,title="Chart"):
 # ==========================================================
 menu = st.sidebar.selectbox(
     "Navigation",
-    ["Control Tower","Analytics","AI Assistant","Voice Assistant","Planning Settings","Live Map","Upload Data","Manual Entry"]
+    [
+        "Control Tower",
+        "Analytics",
+        "AI Assistant",
+        "Voice Assistant",
+        "Planning Settings",
+        "Live Map",
+        "Upload Data",
+        "Manual Entry",
+
+        # 🆕 ENTERPRISE MODULES
+        "Order Tracking",
+        "CRM & Customer Followup",
+        "Finance & Invoicing",
+        "Workflow Automation",
+        "Admin Dashboard",
+        "System Settings"
+    ]
 )
+
 
 # ==========================================================
 # CONTROL TOWER DASHBOARD
@@ -609,3 +665,115 @@ elif menu=="Manual Entry":
              item,"General",qty,40,"Normal")
         )
         st.success("Order Added!")
+# ==========================================================
+# 📦 ORDER TRACKING MODULE
+# ==========================================================
+elif menu=="Order Tracking":
+
+    st.title("📦 Order Lifecycle Tracking")
+
+    if len(orders)==0:
+        st.warning("No orders found")
+    else:
+        order_ids = orders["order_id"].unique()
+        selected = st.selectbox("Select Order", order_ids)
+
+        status = st.selectbox(
+            "Update Status",
+            ["Pending","Processing","Shipped","Delivered"]
+        )
+
+        if st.button("Update Order Status"):
+            run_query(
+                "INSERT INTO order_status VALUES (?,?,?)",
+                (selected,status,str(datetime.datetime.now()))
+            )
+            st.success("Order updated")
+
+        st.subheader("Status History")
+        st.dataframe(get_table("order_status"))
+# ==========================================================
+# 👥 CRM & CUSTOMER FOLLOWUP
+# ==========================================================
+elif menu=="CRM & Customer Followup":
+
+    st.title("Customer Relationship Manager")
+
+    name = st.text_input("Customer Name")
+    phone = st.text_input("Phone")
+    email = st.text_input("Email")
+
+    if st.button("Save Customer"):
+        run_query(
+            "INSERT INTO customers VALUES (?,?,?,?)",
+            (name,phone,email,str(datetime.date.today()))
+        )
+        st.success("Customer saved")
+
+    st.dataframe(get_table("customers"))
+# ==========================================================
+# 💰 FINANCE & INVOICING
+# ==========================================================
+elif menu=="Finance & Invoicing":
+
+    st.title("Invoice & Payment Tracking")
+
+    inv_id = st.text_input("Invoice ID")
+    cust = st.text_input("Customer")
+    amt = st.number_input("Amount")
+
+    if st.button("Create Invoice"):
+        run_query(
+            "INSERT INTO invoices VALUES (?,?,?,?)",
+            (inv_id,cust,amt,"Pending")
+        )
+        st.success("Invoice created")
+
+    st.dataframe(get_table("invoices"))
+# ==========================================================
+# ⚙️ WORKFLOW AUTOMATION
+# ==========================================================
+elif menu=="Workflow Automation":
+
+    st.title("Task & Approval Workflow")
+
+    task = st.text_input("New Task")
+    assignee = st.text_input("Assign To")
+
+    if st.button("Create Task"):
+        run_query("INSERT INTO tasks VALUES (?,?,?)",(task,assignee,"Open"))
+        st.success("Task assigned")
+
+    st.dataframe(get_table("tasks"))
+# ==========================================================
+# 👑 ADMIN DASHBOARD
+# ==========================================================
+elif menu=="Admin Dashboard":
+
+    st.title("Admin Control Panel")
+
+    st.subheader("Orders")
+    st.dataframe(orders)
+
+    st.subheader("Inventory")
+    st.dataframe(inventory)
+
+    st.subheader("Suppliers")
+    st.dataframe(suppliers)
+
+    st.subheader("Invoices")
+    st.dataframe(get_table("invoices"))
+# ==========================================================
+# ⚙️ SYSTEM SETTINGS
+# ==========================================================
+elif menu=="System Settings":
+
+    st.title("System Settings")
+
+    lang = st.selectbox("Language",["English","Tamil"])
+    if lang=="Tamil":
+        st.success("தமிழ் ஆதரவு செயல்படுத்தப்பட்டது")
+
+    if st.button("Backup Database"):
+        st.success("Database backup simulated ✔")
+
