@@ -506,19 +506,27 @@ if menu=="Control Tower":
     for i,(action,item) in enumerate(actions):
         col1,col2,col3 = st.columns([4,1,1])
         col1.write(f"{action} → {item}")
-        if col2.button("Approve", key=f"approve_{i}_{item}"):
-    run_query(
-        "INSERT INTO action_log VALUES (?,?,?,?)",
-        (action,item,"Approved",str(datetime.datetime.now()))
-    )
-    st.success("Action approved and logged")
+            if col2.button("Approve", key=f"approve_{i}_{item}"):
 
-if col3.button("Reject", key=f"reject_{i}_{item}"):
-    run_query(
-        "INSERT INTO action_log VALUES (?,?,?,?)",
-        (action,item,"Rejected",str(datetime.datetime.now()))
-    )
-    st.error("Action rejected and logged")
+        create_purchase_transaction(item, 100)
+
+        run_query(
+            "INSERT INTO action_log VALUES (?,?,?,?)",
+            (action,item,"Approved",str(datetime.datetime.now()))
+        )
+
+        st.success("Purchase executed. All modules updated.")
+        st.rerun()
+
+    if col3.button("Reject", key=f"reject_{i}_{item}"):
+
+        run_query(
+            "INSERT INTO action_log VALUES (?,?,?,?)",
+            (action,item,"Rejected",str(datetime.datetime.now()))
+        )
+
+        st.error("Action rejected and logged")
+
     run_query("""
 CREATE TABLE IF NOT EXISTS action_log(
 action TEXT,
