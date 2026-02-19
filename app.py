@@ -490,10 +490,12 @@ if menu=="Control Tower":
 
     revenue,inv_value,service,util = calc_kpis()
 
-   k1.metric("💵 Sales Generated", f"₹{int(revenue):,}")
-k2.metric("🏦 Working Capital Locked", f"₹{int(inv_value):,}")
-k3.metric("🚚 Order Fulfilment Rate", f"{service}%")
-k4.metric("🏭 Factory Load", f"{int(util)}%")
+    k1,k2,k3,k4 = st.columns(4)
+    k1.metric("💵 Sales Generated", f"₹{int(revenue):,}")
+    k2.metric("🏦 Working Capital Locked", f"₹{int(inv_value):,}")
+    k3.metric("🚚 Order Fulfilment Rate", f"{service}%")
+    k4.metric("🏭 Factory Load", f"{int(util)}%")
+
 
     for cap_alert in capacity_alerts:
         st.info(cap_alert)
