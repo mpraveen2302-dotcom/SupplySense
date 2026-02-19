@@ -103,6 +103,17 @@ assignee TEXT,
 status TEXT
 )
 """)
+run_query("""
+CREATE TABLE IF NOT EXISTS supply_pool(
+source TEXT,
+item TEXT,
+available_qty INT,
+contact TEXT,
+whatsapp TEXT,
+email TEXT
+)
+""")
+
 
 # ==========================================================
 # 🔁 PRODUCT SUBSTITUTION MATRIX (NEW FEATURE)
@@ -134,14 +145,30 @@ persona_key = {
     "Supplier ABC Foods":"supplier"
 }[persona]
 
-if persona=="Owner Rajesh":
-    st.sidebar.info("Concern: Cash flow & missed deliveries")
-elif persona=="Planner Kavitha":
-    st.sidebar.info("Concern: Rescheduling & firefighting")
-elif persona=="Warehouse Arun":
-    st.sidebar.info("Concern: Overstock & storage space")
-else:
-    st.sidebar.info("Concern: Sudden urgent purchase orders")
+PERSONA_CONTEXT = {
+    "Owner Rajesh": {
+        "concern": "Profit & cash flow risk",
+        "why": "Missed deliveries reduce revenue. Overstock blocks working capital."
+    },
+    "Planner Kavitha": {
+        "concern": "Demand vs Production mismatch",
+        "why": "Sudden demand spikes force rescheduling and overtime."
+    },
+    "Warehouse Arun": {
+        "concern": "Space & expiry risk",
+        "why": "Excess stock increases storage cost and wastage risk."
+    },
+    "Supplier ABC Foods": {
+        "concern": "Unpredictable purchase orders",
+        "why": "Last-minute orders disrupt procurement planning."
+    }
+}
+
+st.sidebar.info(
+    f"🎯 Concern: {PERSONA_CONTEXT[persona]['concern']}\n\n"
+    f"💡 Why: {PERSONA_CONTEXT[persona]['why']}"
+)
+
 
 # ==========================================================
 # TABLE LOADER
@@ -155,22 +182,15 @@ def get_table(name):
 orders     = get_table(f"orders_{persona_key}")
 inventory  = get_table(f"inventory_{persona_key}")
 suppliers  = get_table(f"suppliers_{persona_key}")
+
 def load_capacity():
     try:
-        return pd.read_sql(
-            f"SELECT * FROM capacity_{persona_key}",
-            get_conn()
-        )
+        return pd.read_sql("SELECT * FROM capacity", get_conn())
     except:
-        return pd.DataFrame(
-            columns=[
-                "warehouse",
-                "machine",
-                "daily_capacity",
-                "shift_hours",
-                "utilization"
-            ]
-        )
+        return pd.DataFrame(columns=[
+            "warehouse","machine","daily_capacity","shift_hours","utilization"
+        ])
+
 
 # ==========================================================
 # LOAD PLANNING PARAMETERS (PER PERSONA)
@@ -268,7 +288,58 @@ def balancing_engine():
 
 # RUN ENGINE
 balanced, actions = balancing_engine()
+def fulfilment_engine(item, demand_qty):
 
+    inv = inventory[inventory["item"]==item]
+    own_stock = int(inv["on_hand"].sum()) if len(inv)>0 else 0
+
+    remaining = demand_qty - own_stock
+    plan = []
+
+    if own_stock > 0:
+        plan.append(("🏭 Own Warehouse", own_stock, "Internal stock"))
+
+    if remaining <= 0:
+        return plan, 0
+
+    pool = get_table("supply_pool")
+    pool = pool[pool["item"]==item]
+
+    for _,r in pool.iterrows():
+        if remaining <= 0:
+            break
+
+        take = min(remaining, r["available_qty"])
+        remaining -= take
+
+        plan.append((
+            r["source"],
+            take,
+            f"📞 {r['contact']} | 💬 {r['whatsapp']} | ✉ {r['email']}"
+        ))
+
+    return plan, remaining
+
+def create_purchase_transaction(item, qty):
+
+    # 1️⃣ reduce supplier pool
+    run_query("""
+        UPDATE supply_pool
+        SET available_qty = available_qty - ?
+        WHERE item = ?
+    """,(qty,item))
+
+    # 2️⃣ increase our inventory
+    run_query("""
+        UPDATE inventory
+        SET on_hand = on_hand + ?
+        WHERE item = ?
+    """,(qty,item))
+
+    # 3️⃣ log purchase
+    run_query("""
+        INSERT INTO tasks VALUES (?,?,?)
+    """,(f"Purchased {qty} {item}","Procurement","Completed"))
 
 
 # ==========================================================
@@ -419,11 +490,10 @@ if menu=="Control Tower":
 
     revenue,inv_value,service,util = calc_kpis()
 
-    k1,k2,k3,k4 = st.columns(4)
-    k1.metric("💰 Revenue", f"₹{int(revenue):,}")
-    k2.metric("📦 Inventory Value", f"₹{int(inv_value):,}")
-    k3.metric("📈 Service Level", f"{service}%")
-    k4.metric("🏭 Capacity Utilization", f"{int(util)}%")
+   k1.metric("💵 Sales Generated", f"₹{int(revenue):,}")
+k2.metric("🏦 Working Capital Locked", f"₹{int(inv_value):,}")
+k3.metric("🚚 Order Fulfilment Rate", f"{service}%")
+k4.metric("🏭 Factory Load", f"{int(util)}%")
 
     for cap_alert in capacity_alerts:
         st.info(cap_alert)
@@ -435,13 +505,53 @@ if menu=="Control Tower":
         col1,col2,col3 = st.columns([4,1,1])
         col1.write(f"{action} → {item}")
         if col2.button("Approve", key=f"approve_{i}_{item}"):
-            st.success(f"{item} action approved")
-        if col3.button("Reject", key=f"reject_{i}_{item}"):
-            st.error(f"{item} action rejected")
+    run_query(
+        "INSERT INTO action_log VALUES (?,?,?,?)",
+        (action,item,"Approved",str(datetime.datetime.now()))
+    )
+    st.success("Action approved and logged")
+
+if col3.button("Reject", key=f"reject_{i}_{item}"):
+    run_query(
+        "INSERT INTO action_log VALUES (?,?,?,?)",
+        (action,item,"Rejected",str(datetime.datetime.now()))
+    )
+    st.error("Action rejected and logged")
+    run_query("""
+CREATE TABLE IF NOT EXISTS action_log(
+action TEXT,
+item TEXT,
+status TEXT,
+timestamp TEXT
+)
+""")
+
+
 
 
     st.subheader("Projected Stock Levels")
     st.dataframe(balanced)
+st.divider()
+st.subheader("⚡ Instant Order Fulfilment Simulator")
+
+item_req = st.text_input("Product Needed")
+qty_req  = st.number_input("Required Quantity",0,100000)
+
+if st.button("Find Supply Plan"):
+
+    plan, shortage = fulfilment_engine(item_req, qty_req)
+
+    if len(plan)==0:
+        st.error("No supply found for this item")
+    else:
+        df_plan = pd.DataFrame(plan,columns=["Source","Allocated Qty","Contact"])
+        st.dataframe(df_plan)
+
+        if shortage>0:
+            st.error(f"⚠️ Still Short: {shortage} units")
+        else:
+            st.success("✅ Demand fully satisfied")
+
 
 # ==========================================================
 # ANALYTICS DASHBOARD
@@ -640,9 +750,9 @@ elif menu=="Upload Data":
 
         # Save to persona workspace DB
         df.to_sql(
-            f"{table}_{persona_key}",
+            table,
             get_conn(),
-            if_exists="replace",
+            if_exists="append",
             index=False
         )
 
