@@ -501,40 +501,32 @@ if menu=="Control Tower":
         st.info(cap_alert)
 
     st.divider()
-    st.subheader("⚠️ Recommended Actions")
+        st.subheader("⚠️ Recommended Actions")
 
     for i,(action,item) in enumerate(actions):
         col1,col2,col3 = st.columns([4,1,1])
         col1.write(f"{action} → {item}")
-            if col2.button("Approve", key=f"approve_{i}_{item}"):
 
-        create_purchase_transaction(item, 100)
+        if col2.button("Approve", key=f"approve_{i}_{item}"):
 
-        run_query(
-            "INSERT INTO action_log VALUES (?,?,?,?)",
-            (action,item,"Approved",str(datetime.datetime.now()))
-        )
+            create_purchase_transaction(item, 100)
 
-        st.success("Purchase executed. All modules updated.")
-        st.rerun()
+            run_query(
+                "INSERT INTO action_log VALUES (?,?,?,?)",
+                (action,item,"Approved",str(datetime.datetime.now()))
+            )
 
-    if col3.button("Reject", key=f"reject_{i}_{item}"):
+            st.success("Purchase executed. All modules updated.")
+            st.rerun()
 
-        run_query(
-            "INSERT INTO action_log VALUES (?,?,?,?)",
-            (action,item,"Rejected",str(datetime.datetime.now()))
-        )
+        if col3.button("Reject", key=f"reject_{i}_{item}"):
 
-        st.error("Action rejected and logged")
+            run_query(
+                "INSERT INTO action_log VALUES (?,?,?,?)",
+                (action,item,"Rejected",str(datetime.datetime.now()))
+            )
 
-    run_query("""
-CREATE TABLE IF NOT EXISTS action_log(
-action TEXT,
-item TEXT,
-status TEXT,
-timestamp TEXT
-)
-""")
+            st.error("Action rejected and logged")
 
 
 
