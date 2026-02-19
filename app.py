@@ -290,8 +290,18 @@ def balancing_engine():
 balanced, actions = balancing_engine()
 def fulfilment_engine(item, demand_qty):
 
+    if len(inventory)==0:
+        return [], demand_qty
+
+    if "item" not in inventory.columns:
+        return [], demand_qty
+
+    if "on_hand" not in inventory.columns:
+        return [], demand_qty
+
     inv = inventory[inventory["item"]==item]
     own_stock = int(inv["on_hand"].sum()) if len(inv)>0 else 0
+
 
     remaining = demand_qty - own_stock
     plan = []
@@ -736,6 +746,15 @@ elif menu=="Upload Data":
 
         # Standardize columns
         df.columns = df.columns.str.lower().str.replace(" ","_")
+        # Ensure standard naming
+rename_map = {
+    "product":"item",
+    "product_name":"item",
+    "stock":"on_hand",
+    "quantity":"on_hand"
+}
+df.rename(columns=rename_map, inplace=True)
+
 
         # Capacity column safety
         if table == "capacity":
