@@ -1,16 +1,12 @@
-from sqlalchemy import create_engine
 import os
+from sqlalchemy import create_engine
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://postgres:password@localhost:5432/supplysense"
+)
 
-engine = create_engine(DATABASE_URL)
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 
 def get_engine():
     return engine
-
-def get_table(name):
-    return engine.execute(f"SELECT * FROM {name}")
-
-def run_query(query, params=None):
-    with engine.begin() as conn:
-        conn.execute(query, params or {})
