@@ -483,6 +483,7 @@ elif menu == "System Settings":
 
     if st.button("View Logs"):
         st.dataframe(get_table("action_log"))
+
 # ==========================================================
 # ENTERPRISE SIDEBAR EXTENSIONS (SCOPED SAFELY)
 # ==========================================================
