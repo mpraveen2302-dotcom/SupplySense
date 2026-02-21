@@ -95,8 +95,10 @@ task TEXT,assignee TEXT,status TEXT)
 """
 ]
 
-for sql in tables_sql:
-    run_query(sql)
+if "db_initialized" not in st.session_state:
+    for sql in tables_sql:
+        run_query(sql)
+    st.session_state.db_initialized = True
 
 
 # ==========================================================
@@ -135,11 +137,23 @@ if not st.session_state.logged_in:
 # LOAD LIVE DATA
 # ==========================================================
 
-orders = get_table("orders")
-inventory = get_table("inventory")
-suppliers = get_table("suppliers")
-capacity_df = get_table("capacity")
-supply_pool = get_table("supply_pool")
+@st.cache_data
+def load_all_data():
+    return {
+        "orders": get_table("orders"),
+        "inventory": get_table("inventory"),
+        "suppliers": get_table("suppliers"),
+        "capacity": get_table("capacity"),
+        "supply_pool": get_table("supply_pool")
+    }
+
+data = load_all_data()
+
+orders = data["orders"]
+inventory = data["inventory"]
+suppliers = data["suppliers"]
+capacity_df = data["capacity"]
+supply_pool = data["supply_pool"]
 # ==========================================================
 # BALANCING ENGINE (REAL-TIME SUPPLY–DEMAND)
 # ==========================================================
