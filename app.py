@@ -567,27 +567,27 @@ if menu=="Control Tower":
     st.subheader("Projected Stock Levels")
     st.dataframe(balanced)
 
-st.divider()
-st.subheader("⚡ Instant Order Fulfilment Simulator")
+    # ✅ MOVE THIS INSIDE CONTROL TOWER
+    st.divider()
+    st.subheader("⚡ Instant Order Fulfilment Simulator")
 
-item_req = st.text_input("Product Needed")
-qty_req  = st.number_input("Required Quantity",0,100000)
+    item_req = st.text_input("Product Needed")
+    qty_req  = st.number_input("Required Quantity",0,100000)
 
-if st.button("Find Supply Plan"):
+    if st.button("Find Supply Plan"):
 
-    plan, shortage = fulfilment_engine(item_req, qty_req)
+        plan, shortage = fulfilment_engine(item_req, qty_req)
 
-    if len(plan)==0:
-        st.error("No supply found for this item")
-    else:
-        df_plan = pd.DataFrame(plan,columns=["Source","Allocated Qty","Contact"])
-        st.dataframe(df_plan)
-
-        if shortage>0:
-            st.error(f"⚠️ Still Short: {shortage} units")
+        if len(plan)==0:
+            st.error("No supply found for this item")
         else:
-            st.success("✅ Demand fully satisfied")
+            df_plan = pd.DataFrame(plan,columns=["Source","Allocated Qty","Contact"])
+            st.dataframe(df_plan)
 
+            if shortage>0:
+                st.error(f"⚠️ Still Short: {shortage} units")
+            else:
+                st.success("✅ Demand fully satisfied")
 
 # ==========================================================
 # ANALYTICS DASHBOARD
