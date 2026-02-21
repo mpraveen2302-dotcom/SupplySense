@@ -1,9 +1,9 @@
-ROLE_MAP = {
+ROLE_PERMISSIONS = {
     "admin": ["ALL"],
-    "planner": ["Control Tower","Analytics"],
+    "planner": ["Control Tower", "Analytics"],
     "warehouse": ["Control Tower"],
     "supplier": ["Analytics"]
 }
 
 def get_allowed_pages(role):
-    return ROLE_MAP.get(role, [])
+    return ROLE_PERMISSIONS.get(role, [])
