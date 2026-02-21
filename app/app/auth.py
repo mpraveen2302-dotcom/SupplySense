@@ -2,7 +2,7 @@ import jwt
 import datetime
 import os
 
-SECRET = os.getenv("JWT_SECRET")
+SECRET = os.getenv("JWT_SECRET", "supersecret")
 
 def generate_token(username):
     payload = {
