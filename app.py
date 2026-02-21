@@ -403,13 +403,46 @@ def send_whatsapp_alert(message):
 for action, item in actions:
     if "🚨" in action:
         send_whatsapp_alert(f"URGENT: Stockout risk for {item}")
-        # ==========================================================
+    # ==========================================================
+# MULTI-TENANT LOGIN (MUST BE FIRST)
+# ==========================================================
+
+USERS = {
+    "admin":"admin123",
+    "planner":"plan123",
+    "warehouse":"wh123",
+    "supplier":"sup123"
+}
+
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+
+if not st.session_state.logged_in:
+
+    st.title("🔐 SupplySense Login")
+
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+
+    if st.button("Login"):
+        if username in USERS and USERS[username] == password:
+            st.session_state.logged_in = True
+            st.session_state.user_role = username
+            st.success("Login successful.")
+            st.rerun()
+        else:
+            st.error("Invalid credentials.")
+
+    st.stop()
+
+
+# ==========================================================
 # NAVIGATION
 # ==========================================================
 
 from app.rbac import get_allowed_pages
 
-role = "admin"  # replace later with real role lookup
+role = st.session_state.user_role
 allowed = get_allowed_pages(role)
 
 ALL_PAGES = [
@@ -423,6 +456,7 @@ ALL_PAGES = [
 visible_pages = ALL_PAGES if "ALL" in allowed else allowed
 
 menu = st.sidebar.selectbox("Navigation", visible_pages)
+
 
 # ==========================================================
 # CONTROL TOWER
@@ -449,18 +483,27 @@ if menu == "Control Tower":
         col1.write(f"{action} → {item}")
 
         if col2.button("Approve", key=f"approve_{i}"):
+
             create_purchase_transaction(item, 100)
-            run_query("""
-        INSERT INTO action_log VALUES (?,?,?,?)
-    """,(action,item,"Approved",str(datetime.datetime.now())))
+
+            run_query(
+                """
+                INSERT INTO action_log VALUES (?,?,?,?)
+                """,
+                (action, item, "Approved", str(datetime.datetime.now()))
+            )
+
             st.success("Transaction executed.")
             st.rerun()
 
         if col3.button("Reject", key=f"reject_{i}"):
 
-            run_query("""
-            INSERT INTO action_log VALUES (?,?,?,?)
-            """,(action,item,"Rejected",str(datetime.datetime.now())))
+            run_query(
+                """
+                INSERT INTO action_log VALUES (?,?,?,?)
+                """,
+                (action, item, "Rejected", str(datetime.datetime.now()))
+            )
 
             st.error("Action rejected.")
 
@@ -472,7 +515,7 @@ if menu == "Control Tower":
     st.subheader("⚡ Instant Order Fulfilment Simulator")
 
     item_req = st.text_input("Product Needed")
-    qty_req = st.number_input("Required Quantity",0,100000)
+    qty_req = st.number_input("Required Quantity", 0, 100000)
 
     if st.button("Find Supply Plan"):
 
@@ -481,14 +524,17 @@ if menu == "Control Tower":
         if not plan:
             st.error("No supply found.")
         else:
-            df_plan = pd.DataFrame(plan,
-                                   columns=["Source","Allocated Qty","Contact"])
+            df_plan = pd.DataFrame(
+                plan,
+                columns=["Source","Allocated Qty","Contact"]
+            )
             st.dataframe(df_plan)
 
             if shortage > 0:
                 st.error(f"Still Short: {shortage}")
             else:
                 st.success("Demand fully satisfied.")
+
 
 # ==========================================================
 # ANALYTICS
@@ -499,55 +545,32 @@ elif menu == "Analytics":
     st.title("📊 Analytics Dashboard")
 
     if not inventory.empty:
-        fig = px.bar(inventory, x="warehouse", y="on_hand",
-                     color="category", title="Inventory by Warehouse")
+        fig = px.bar(
+            inventory,
+            x="warehouse",
+            y="on_hand",
+            color="category",
+            title="Inventory by Warehouse"
+        )
         st.plotly_chart(fig, use_container_width=True)
 
     if not orders.empty:
-        fig2 = px.pie(orders, names="category",
-                      values="qty", title="Demand by Category")
+        fig2 = px.pie(
+            orders,
+            names="category",
+            values="qty",
+            title="Demand by Category"
+        )
         st.plotly_chart(fig2, use_container_width=True)
 
     if not forecast_df.empty:
-        fig3 = px.line(forecast_df, x="date",
-                       y=["qty","forecast"],
-                       title="7-Day Rolling Forecast")
+        fig3 = px.line(
+            forecast_df,
+            x="date",
+            y=["qty","forecast"],
+            title="7-Day Rolling Forecast"
+        )
         st.plotly_chart(fig3, use_container_width=True)
-
-# ==========================================================
-# MULTI-TENANT LOGIN
-# ==========================================================
-
-USERS = {
-    "admin":"admin123",
-    "planner":"plan123",
-    "warehouse":"wh123",
-    "supplier":"sup123"
-}
-
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-
-if not st.session_state.logged_in:
-
-    st.title("🔐 SupplySense Login")
-
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
-
-    if st.button("Login"):
-
-        if username in USERS and USERS[username] == password:
-            st.session_state.logged_in = True
-            st.session_state.user_role = username
-            st.success("Login successful.")
-            st.experimental_rerun()
-        else:
-            st.error("Invalid credentials.")
-
-    st.stop()
-
-
 # ==========================================================
 # ERP UI STYLE
 # ==========================================================
