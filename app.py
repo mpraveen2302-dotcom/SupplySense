@@ -39,16 +39,7 @@ def get_table(name):
     except:
         return pd.DataFrame()
 
-# ==========================================================
-# AUTO REFRESH
-# ==========================================================
 
-if "last_refresh" not in st.session_state:
-    st.session_state.last_refresh = time.time()
-
-if time.time() - st.session_state.last_refresh > 15:
-    st.session_state.last_refresh = time.time()
-    st.rerun()
 
 
 # ==========================================================
@@ -447,7 +438,10 @@ def transfer_inventory(item, qty, from_wh, to_wh):
 # NAVIGATION MENU
 # ==========================================================
 
-menu = st.sidebar.selectbox(
+if "menu" not in st.session_state:
+    st.session_state.menu = "Control Tower"
+
+st.session_state.menu = st.sidebar.selectbox(
     "Navigation",
     [
         "Control Tower",
@@ -457,9 +451,19 @@ menu = st.sidebar.selectbox(
         "Admin Dashboard",
         "Planning Settings",
         "System Settings"
-    ]
+    ],
+    index=[
+        "Control Tower",
+        "Analytics",
+        "Upload Data",
+        "Manual Entry",
+        "Admin Dashboard",
+        "Planning Settings",
+        "System Settings"
+    ].index(st.session_state.menu)
 )
 
+menu = st.session_state.menu
 # ==========================================================
 # CONTROL TOWER
 # ==========================================================
@@ -574,25 +578,26 @@ elif menu == "Upload Data":
 
     table = st.selectbox(
         "Select Table",
-        ["orders","inventory","suppliers",
-         "capacity","supply_pool"]
+        ["orders","inventory","suppliers","capacity","supply_pool"]
     )
 
-    file = st.file_uploader("Upload CSV")
+    file = st.file_uploader("Upload CSV", type=["csv"])
 
-    if file:
+    if file is not None:
 
-        df = pd.read_csv(file)
-        df.columns = df.columns.str.lower().str.replace(" ","_")
+        try:
+            df = pd.read_csv(file)
+            df.columns = df.columns.str.lower().str.replace(" ","_")
 
-        df.to_sql(table, get_conn(),
-                  if_exists="append",
-                  index=False)
+            conn = get_conn()
+            df.to_sql(table, conn, if_exists="append", index=False)
+            conn.close()
 
-        st.success("Upload successful")
-        st.rerun()
+            st.success(f"{table} uploaded successfully!")
+            st.info("Go to Admin Dashboard to verify data.")
 
-
+        except Exception as e:
+            st.error(f"Upload failed: {e}")
 # ==========================================================
 # MANUAL ENTRY
 # ==========================================================
