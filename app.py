@@ -449,16 +449,11 @@ if menu == "Control Tower":
         col1.write(f"{action} → {item}")
 
         if col2.button("Approve", key=f"approve_{i}"):
-
             create_purchase_transaction(item, 100)
-            from app.kafka_engine import send_event
-send_event("PURCHASE_APPROVED", {"item": item})
-
             run_query("""
-            INSERT INTO action_log VALUES (?,?,?,?)
-            """,(action,item,"Approved",str(datetime.datetime.now())))
-
-            st.success("Transaction executed & system updated.")
+        INSERT INTO action_log VALUES (?,?,?,?)
+    """,(action,item,"Approved",str(datetime.datetime.now())))
+            st.success("Transaction executed.")
             st.rerun()
 
         if col3.button("Reject", key=f"reject_{i}"):
