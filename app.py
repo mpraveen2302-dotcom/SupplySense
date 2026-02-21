@@ -379,22 +379,24 @@ def calc_kpis():
     # ---------- Revenue ----------
     if "qty" in orders.columns and "unit_price" in orders.columns and len(orders) > 0:
 
-    qty = pd.to_numeric(orders["qty"], errors="coerce").fillna(0)
-    price = pd.to_numeric(orders["unit_price"], errors="coerce").fillna(0)
+        qty = pd.to_numeric(orders["qty"], errors="coerce").fillna(0)
+        price = pd.to_numeric(orders["unit_price"], errors="coerce").fillna(0)
 
-    revenue = (qty * price).sum()
-else:
-    revenue = 0
+        revenue = (qty * price).sum()
+
+    else:
+        revenue = 0
 
     # ---------- Inventory value ----------
     if "on_hand" in inventory.columns and "unit_cost" in inventory.columns and len(inventory) > 0:
 
-    stock = pd.to_numeric(inventory["on_hand"], errors="coerce").fillna(0)
-    cost = pd.to_numeric(inventory["unit_cost"], errors="coerce").fillna(0)
+        stock = pd.to_numeric(inventory["on_hand"], errors="coerce").fillna(0)
+        cost = pd.to_numeric(inventory["unit_cost"], errors="coerce").fillna(0)
 
-    inv_value = (stock * cost).sum()
-else:
-    inv_value = 0
+        inv_value = (stock * cost).sum()
+
+    else:
+        inv_value = 0
 
     # ---------- Service level (demo metric) ----------
     service_level = 96 if len(orders) > 0 else 0
@@ -402,15 +404,17 @@ else:
     # ---------- Capacity utilization ----------
     if "utilization" in capacity_df.columns and len(capacity_df) > 0:
 
-    util_series = pd.to_numeric(
-        capacity_df["utilization"],
-        errors="coerce"
-    ).fillna(0)
+        util_series = pd.to_numeric(
+            capacity_df["utilization"],
+            errors="coerce"
+        ).fillna(0)
 
-    util = util_series.mean()
+        util = util_series.mean()
 
-else:
-    util = 0
+    else:
+        util = 0
+
+    return revenue, inv_value, service_level, util
 
 
 
