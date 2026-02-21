@@ -434,36 +434,28 @@ def transfer_inventory(item, qty, from_wh, to_wh):
          "Warehouse",
          "Completed")
     )
-    # ==========================================================
-# NAVIGATION MENU
+   # ==========================================================
+# STABLE NAVIGATION (DO NOT MODIFY)
 # ==========================================================
+
+PAGES = [
+    "Control Tower",
+    "Analytics",
+    "Upload Data",
+    "Manual Entry",
+    "Admin Dashboard",
+    "Planning Settings",
+    "System Settings"
+]
 
 if "menu" not in st.session_state:
     st.session_state.menu = "Control Tower"
 
-st.session_state.menu = st.sidebar.selectbox(
+menu = st.sidebar.selectbox(
     "Navigation",
-    [
-        "Control Tower",
-        "Analytics",
-        "Upload Data",
-        "Manual Entry",
-        "Admin Dashboard",
-        "Planning Settings",
-        "System Settings"
-    ],
-    index=[
-        "Control Tower",
-        "Analytics",
-        "Upload Data",
-        "Manual Entry",
-        "Admin Dashboard",
-        "Planning Settings",
-        "System Settings"
-    ].index(st.session_state.menu)
+    PAGES,
+    key="menu"
 )
-
-menu = st.session_state.menu
 # ==========================================================
 # CONTROL TOWER
 # ==========================================================
