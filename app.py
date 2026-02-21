@@ -435,8 +435,8 @@ def transfer_inventory(item, qty, from_wh, to_wh):
          "Warehouse",
          "Completed")
     )
-   # ==========================================================
-# STABLE NAVIGATION (DO NOT MODIFY)
+  # ==========================================================
+# STABLE NAVIGATION (LOCKED PAGE STATE)
 # ==========================================================
 
 PAGES = [
@@ -452,11 +452,14 @@ PAGES = [
 if "menu" not in st.session_state:
     st.session_state.menu = "Control Tower"
 
-menu = st.sidebar.selectbox(
+selected_page = st.sidebar.selectbox(
     "Navigation",
     PAGES,
-    key="menu"
+    index=PAGES.index(st.session_state.menu)
 )
+
+st.session_state.menu = selected_page
+menu = st.session_state.menu
 # ==========================================================
 # CONTROL TOWER
 # ==========================================================
