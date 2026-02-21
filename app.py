@@ -124,7 +124,7 @@ if not st.session_state.logged_in:
         if username in USERS and USERS[username] == password:
             st.session_state.logged_in = True
             st.session_state.role = username
-            
+            st.rerun()
         else:
             st.error("Invalid credentials")
 
