@@ -87,8 +87,15 @@ task TEXT,assignee TEXT,status TEXT)
 """
 ]
 
+
 for sql in tables_sql:
     run_query(sql)
+
+# Add country column safely (only if not exists)
+try:
+    run_query("ALTER TABLE suppliers ADD COLUMN country TEXT")
+except:
+    pass
 
 # ==========================================================
 # LOGIN SYSTEM
