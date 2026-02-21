@@ -14,26 +14,28 @@ from sklearn.linear_model import LinearRegression
 st.set_page_config(layout="wide")
 
 # ==========================================================
-# DATABASE ENGINE (SINGLE SOURCE)
+# DATABASE ENGINE (POSTGRESQL – PRODUCTION)
 # ==========================================================
 
-def get_conn():
-    return sqlite3.connect("supplysense.db", check_same_thread=False)
+from sqlalchemy import create_engine, text
+import os
 
-def run_query(query, params=()):
-    conn = get_conn()
-    conn.execute(query, params)
-    conn.commit()
-    conn.close()
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://postgres:password@localhost:5432/supplysense"
+)
+
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+
+def run_query(query, params=None):
+    with engine.begin() as conn:
+        conn.execute(text(query), params or {})
 
 def get_table(name):
-    conn = get_conn()
     try:
-        df = pd.read_sql(f"SELECT * FROM {name}", conn)
+        return pd.read_sql(f"SELECT * FROM {name}", engine)
     except:
-        df = pd.DataFrame()
-    conn.close()
-    return df
+        return pd.DataFrame()
 
 
 # ==========================================================
