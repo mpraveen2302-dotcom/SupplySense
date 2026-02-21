@@ -924,6 +924,13 @@ elif menu=="Admin Dashboard":
 
     st.subheader("Invoices")
     st.dataframe(get_table("invoices"))
+    
+    st.subheader("Database Tables")
+    tables = pd.read_sql(
+        "SELECT name FROM sqlite_master WHERE type='table';",
+        get_conn()
+    )
+    st.dataframe(tables)
 
 st.write("Tables in DB:")
 tables = pd.read_sql("SELECT name FROM sqlite_master WHERE type='table';", get_conn())
