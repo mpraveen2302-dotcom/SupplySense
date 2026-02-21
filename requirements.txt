@@ -2,7 +2,10 @@ streamlit
 pandas
 numpy
 plotly
-twilio
-reportlab
-openpyxl
+scikit-learn
+sqlalchemy
+psycopg2-binary
+stripe
 openai
+twilio
+kafka-python
