@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: supplysense
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: supplysense
+  template:
+    metadata:
+      labels:
+        app: supplysense
+    spec:
+      containers:
+      - name: supplysense
+        image: your-dockerhub/supplysense:latest
+        ports:
+        - containerPort: 8501
