@@ -13,7 +13,8 @@ import plotly.express as px
 import datetime
 
 st.set_page_config(layout="wide")
-
+st.cache_data.clear()
+st.cache_resource.clear()
 # ⏱ refresh indicator
 st.sidebar.write("⏱ Last updated:", datetime.datetime.now().strftime("%H:%M:%S"))
 
@@ -26,16 +27,28 @@ except:
     AI_AVAILABLE = False
 
 # ==========================================================
-# DATABASE CONNECTION
+# DATABASE CONNECTION (STABLE VERSION)
 # ==========================================================
-@st.cache_resource
-def get_conn():
-    return sqlite3.connect("/tmp/supplysense.db", check_same_thread=False)
 
-def run_query(q,p=()):
-    conn=get_conn()
-    conn.execute(q,p)
+def get_conn():
+    return sqlite3.connect("supplysense.db", check_same_thread=False)
+
+def run_query(query, params=()):
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute(query, params)
     conn.commit()
+    conn.close()
+
+def get_table(name):
+    conn = get_conn()
+    try:
+        df = pd.read_sql(f"SELECT * FROM {name}", conn)
+    except:
+        df = pd.DataFrame()
+    conn.close()
+    return df
+
 
 # ==========================================================
 # CREATE BASE TABLES
@@ -50,6 +63,14 @@ persona TEXT,
 safety_stock INT,
 lead_time INT,
 moq INT
+)
+""")
+run_query("""
+CREATE TABLE IF NOT EXISTS action_log(
+action TEXT,
+item TEXT,
+decision TEXT,
+timestamp TEXT
 )
 """)
 # ==========================================================
@@ -165,9 +186,9 @@ def get_table(name):
     except:
         return pd.DataFrame()
 
-orders     = get_table(f"orders_{persona_key}")
-inventory  = get_table(f"inventory_{persona_key}")
-suppliers  = get_table(f"suppliers_{persona_key}")
+orders     = get_table("orders")
+inventory  = get_table("inventory")
+suppliers  = get_table("suppliers")
 
 def load_capacity():
     try:
@@ -800,7 +821,7 @@ elif menu=="Manual Entry":
 
     if st.button("Add Order"):
         run_query(
-            f"INSERT INTO orders_{persona_key} VALUES (?,?,?,?,?,?,?,?,?,?)",
+            f"INSERT INTO orders VALUES (?,?,?,?,?,?,?,?,?,?)",
             ("NEW","2025-01-01","Retail","Chennai","Retail",
              item,"General",qty,40,"Normal")
         )
@@ -903,6 +924,10 @@ elif menu=="Admin Dashboard":
 
     st.subheader("Invoices")
     st.dataframe(get_table("invoices"))
+
+st.write("Tables in DB:")
+tables = pd.read_sql("SELECT name FROM sqlite_master WHERE type='table';", get_conn())
+st.dataframe(tables)
 # ==========================================================
 # ⚙️ SYSTEM SETTINGS
 # ==========================================================
