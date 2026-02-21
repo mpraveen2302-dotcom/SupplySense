@@ -124,7 +124,7 @@ if not st.session_state.logged_in:
         if username in USERS and USERS[username] == password:
             st.session_state.logged_in = True
             st.session_state.role = username
-            st.rerun()
+            
         else:
             st.error("Invalid credentials")
 
@@ -499,7 +499,7 @@ if menu == "Control Tower":
             )
 
             st.success("Approved")
-            st.rerun()
+            
 
         if col3.button("Reject", key=f"reject_{i}"):
 
@@ -630,7 +630,7 @@ elif menu == "Manual Entry":
         )
 
         st.success("Order Added")
-        st.rerun()
+        
 
 
 # ==========================================================
@@ -747,7 +747,7 @@ if st.sidebar.button("Execute Transfer"):
     )
 
     st.sidebar.success("Transfer Completed")
-    st.rerun()
+    
 
 
 # ==========================================================
@@ -850,7 +850,7 @@ if st.sidebar.button("Simulate 200% Demand Spike"):
         )
 
         st.sidebar.success("Demand spike simulated")
-        st.rerun()
+        
 
 
 # ==========================================================
