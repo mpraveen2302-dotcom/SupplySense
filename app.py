@@ -1142,7 +1142,7 @@ elif menu == "Upload Data":
             df = pd.read_csv(file)
             df.columns = df.columns.str.lower().str.replace(" ","_")
 
-            conn = get_conn()
+           
             df.to_sql(table, conn, if_exists="append", index=False)
             conn.close()
 
