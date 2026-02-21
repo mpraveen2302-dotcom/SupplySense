@@ -14,29 +14,30 @@ from sklearn.linear_model import LinearRegression
 st.set_page_config(layout="wide")
 
 # ==========================================================
-# DATABASE ENGINE (POSTGRESQL – PRODUCTION)
+# DATABASE ENGINE (POSTGRESQL + SQLITE FALLBACK)
 # ==========================================================
 
 from sqlalchemy import create_engine, text
 import os
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres:password@localhost:5432/supplysense"
-)
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+if DATABASE_URL:
+    engine = create_engine(DATABASE_URL)
+else:
+    engine = create_engine("sqlite:///supplysense.db")
+
 
 def run_query(query, params=None):
     with engine.begin() as conn:
         conn.execute(text(query), params or {})
+
 
 def get_table(name):
     try:
         return pd.read_sql(f"SELECT * FROM {name}", engine)
     except:
         return pd.DataFrame()
-
 
 # ==========================================================
 # AUTO REFRESH
